@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(tee /tmp/tsc.out)",
+      "Bash(bunx tsc *)",
+      "Bash(tee /tmp/tsc2.out)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(bunx oxlint *)",
+      "Bash(bunx oxfmt *)",
+      "Bash(bun run *)",
+      "Bash(bun test *)",
+      "Bash(bun remove *)",
+      "Bash(bun add *)",
+      "Bash(PORT=3099 timeout 4 bun run src/index.tsx)",
+      "Bash(curl -s -o /dev/null -w \"GET / -> %{http_code}\\\\n\" http://localhost:3099/)",
+      "Bash(curl -s -o /dev/null -w \"GET /static/pico.min.css -> %{http_code}\\\\n\" http://localhost:3099/static/pico.min.css)",
+      "Bash(curl -s -o /dev/null -w \"GET /static/htmx.min.js -> %{http_code}\\\\n\" http://localhost:3099/static/htmx.min.js)",
+      "Bash(wait)",
+      "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless --disable-gpu --no-sandbox --hide-scrollbars --window-size=1400,900 --screenshot=/tmp/devcamp-pico.png http://localhost:3000/)",
+      "Bash(kill b8avqm868 *)",
+      "Bash(pkill -f \"bun.*dev\")",
+      "Bash(rm -f /tmp/devcamp-pico.png)"
+    ]
+  }
+}
