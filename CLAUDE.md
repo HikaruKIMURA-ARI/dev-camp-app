@@ -19,7 +19,7 @@ No test framework is configured.
 
 ### 基本原則
 
-- **テスト哲学に必ず従うこと**: `.claude/test-philosophy.md` を必ず参照すること
+- **テスト哲学に必ず従うこと**: `.claude/rules/testing/test-philosophy.md` を必ず参照すること
 - **テストファースト**: すべての実装はテストを先に書いてから行う
 - **Red-Green-Refactor**: このサイクルを厳密に守る
 - **1 テスト 1 実装**: 一度に 1 つのテストだけを追加し、それを通す実装を書く

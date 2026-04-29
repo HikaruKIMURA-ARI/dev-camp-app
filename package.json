@@ -11,11 +11,9 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "test": "bun test",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix",
-    "format": "oxfmt",
-    "format:check": "oxfmt --check"
-},
+    "lint": "oxlint --fix",
+    "fmt": "oxfmt"
+  },
   "dependencies": {
     "@libsql/client": "^0.14.0",
     "@picocss/pico": "^2.1.1",

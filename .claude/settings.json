@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat .claude/skills/tdd-workflow/SKILL.md 2>/dev/null || echo 'TDD skill が見つかりませんでした'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun test && bun run lint && bun run fmt"
+          }
+        ]
+      }
+    ]
+  }
+}
