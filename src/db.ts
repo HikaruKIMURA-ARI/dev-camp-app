@@ -17,6 +17,10 @@ export function listMessages(): Promise<Message[]> {
   return db.select().from(messages).orderBy(desc(messages.id)).limit(50);
 }
 
-export async function addMessage(body: string): Promise<void> {
-  await db.insert(messages).values({ body });
+export async function addMessage(input: {
+  body: string;
+  username: string;
+  gender: string;
+}): Promise<void> {
+  await db.insert(messages).values(input);
 }

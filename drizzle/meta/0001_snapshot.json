@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8a8466e0-c97b-4232-a74e-657493f66def",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "43ae6ac6-84cd-4023-a5d1-d015d8da7020",
+  "prevId": "8a8466e0-c97b-4232-a74e-657493f66def",
   "tables": {
     "messages": {
       "name": "messages",
@@ -20,6 +20,22 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "username": {
+          "name": "username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "gender": {
+          "name": "gender",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
         },
         "created_at": {
           "name": "created_at",

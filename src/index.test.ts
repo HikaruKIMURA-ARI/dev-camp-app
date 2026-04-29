@@ -48,7 +48,11 @@ describe("src/index.tsx", () => {
   });
 
   test("POST /messages は本文を保存し更新済みリストを返す", async () => {
-    const res = await postForm("/messages", { body: "こんにちは" });
+    const res = await postForm("/messages", {
+      username: "太郎",
+      gender: "男",
+      body: "こんにちは",
+    });
 
     expect(res.status).toBe(200);
     const html = await res.text();
@@ -74,7 +78,11 @@ describe("src/index.tsx", () => {
   });
 
   test("POST /messages は本文を trim してから保存する", async () => {
-    await postForm("/messages", { body: "  前後に空白  " });
+    await postForm("/messages", {
+      username: "太郎",
+      gender: "男",
+      body: "  前後に空白  ",
+    });
 
     const rows = await db.select().from(messages);
     expect(rows).toHaveLength(1);
@@ -90,9 +98,13 @@ describe("src/index.tsx", () => {
   });
 
   test("複数回 POST すると全メッセージが新しい順で並ぶ", async () => {
-    await postForm("/messages", { body: "1通目" });
-    await postForm("/messages", { body: "2通目" });
-    const res = await postForm("/messages", { body: "3通目" });
+    await postForm("/messages", { username: "太郎", gender: "男", body: "1通目" });
+    await postForm("/messages", { username: "太郎", gender: "男", body: "2通目" });
+    const res = await postForm("/messages", {
+      username: "太郎",
+      gender: "男",
+      body: "3通目",
+    });
 
     const html = await res.text();
     expect(html.indexOf("3通目")).toBeLessThan(html.indexOf("2通目"));
@@ -119,5 +131,123 @@ describe("src/index.tsx", () => {
   test("未定義のルートは 404 を返す", async () => {
     const res = await fetchApp("/does-not-exist");
     expect(res.status).toBe(404);
+  });
+
+  // ---- ユーザー名・性別フィールド追加に伴うテスト計画 ----
+  test("GET / はユーザー名入力フィールドを返す", async () => {
+    const res = await fetchApp("/");
+    const html = await res.text();
+
+    expect(html).toContain('name="username"');
+  });
+  test("GET / はユーザー名フィールドを必須にする", async () => {
+    const res = await fetchApp("/");
+    const html = await res.text();
+
+    expect(html).toMatch(/<input[^>]*name="username"[^>]*required/);
+  });
+  test("GET / は性別の男ラジオボタンを返す", async () => {
+    const res = await fetchApp("/");
+    const html = await res.text();
+
+    expect(html).toMatch(/<input[^>]*type="radio"[^>]*name="gender"[^>]*value="男"/);
+  });
+  test("GET / は性別の女ラジオボタンを返す", async () => {
+    const res = await fetchApp("/");
+    const html = await res.text();
+
+    expect(html).toMatch(/<input[^>]*type="radio"[^>]*name="gender"[^>]*value="女"/);
+  });
+  test("GET / は性別ラジオボタンを必須にする", async () => {
+    const res = await fetchApp("/");
+    const html = await res.text();
+
+    expect(html).toMatch(/<input[^>]*type="radio"[^>]*name="gender"[^>]*required/);
+  });
+  test("GET / は保存済みメッセージのユーザー名を表示する", async () => {
+    await db.insert(messages).values({ body: "やあ", username: "太郎", gender: "男" });
+
+    const res = await fetchApp("/");
+    const html = await res.text();
+
+    expect(html).toContain("太郎");
+  });
+  test("GET / は保存済みメッセージの性別を表示する", async () => {
+    await db.insert(messages).values({ body: "やあ", username: "太郎", gender: "女" });
+
+    const res = await fetchApp("/");
+    const html = await res.text();
+
+    const articleHtml = html.match(/<article>[\s\S]*?<\/article>/)?.[0] ?? "";
+    expect(articleHtml).toContain("女");
+  });
+  test("POST /messages はユーザー名を trim してから保存する", async () => {
+    await postForm("/messages", {
+      username: "  太郎  ",
+      gender: "男",
+      body: "こんにちは",
+    });
+
+    const rows = await db.select().from(messages);
+    expect(rows[0]?.username).toBe("太郎");
+  });
+  test("POST /messages はユーザー名が空のとき保存しない", async () => {
+    const res = await postForm("/messages", {
+      username: "",
+      gender: "男",
+      body: "こんにちは",
+    });
+
+    expect(res.status).toBe(200);
+    const rows = await db.select().from(messages);
+    expect(rows).toHaveLength(0);
+  });
+  test("POST /messages はユーザー名が空白のみのとき保存しない", async () => {
+    const res = await postForm("/messages", {
+      username: "   ",
+      gender: "男",
+      body: "こんにちは",
+    });
+
+    expect(res.status).toBe(200);
+    const rows = await db.select().from(messages);
+    expect(rows).toHaveLength(0);
+  });
+  test("POST /messages は性別が無いとき保存しない", async () => {
+    const res = await postForm("/messages", {
+      username: "太郎",
+      body: "こんにちは",
+    });
+
+    expect(res.status).toBe(200);
+    const rows = await db.select().from(messages);
+    expect(rows).toHaveLength(0);
+  });
+  test("POST /messages は性別が男・女以外のとき保存しない", async () => {
+    const res = await postForm("/messages", {
+      username: "太郎",
+      gender: "その他",
+      body: "こんにちは",
+    });
+
+    expect(res.status).toBe(200);
+    const rows = await db.select().from(messages);
+    expect(rows).toHaveLength(0);
+  });
+
+  test("POST /messages はユーザー名・性別・本文を全て保存する", async () => {
+    const res = await postForm("/messages", {
+      username: "太郎",
+      gender: "男",
+      body: "こんにちは",
+    });
+
+    expect(res.status).toBe(200);
+
+    const rows = await db.select().from(messages);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.username).toBe("太郎");
+    expect(rows[0]?.gender).toBe("男");
+    expect(rows[0]?.body).toBe("こんにちは");
   });
 });

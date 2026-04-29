@@ -36,6 +36,9 @@ export const MessageList: FC<{ messages: Message[] }> = ({ messages }) => (
     ) : (
       messages.map((m) => (
         <article>
+          <header>
+            <strong>{m.username}</strong> <small>({m.gender})</small>
+          </header>
           <p>{m.body}</p>
           <footer>
             <small>
@@ -61,13 +64,14 @@ export const Page: FC<{ messages: Message[] }> = ({ messages }) => (
       hx-on--after-request="this.reset()"
       role="group"
     >
-      <input
-        type="text"
-        name="body"
-        placeholder="メッセージを入力"
-        required
-        autocomplete="off"
-      />
+      <input type="text" name="username" placeholder="ユーザー名" required autocomplete="off" />
+      <label>
+        <input type="radio" name="gender" value="男" required />男
+      </label>
+      <label>
+        <input type="radio" name="gender" value="女" />女
+      </label>
+      <input type="text" name="body" placeholder="メッセージを入力" required autocomplete="off" />
       <input type="submit" value="送信" />
     </form>
     <MessageList messages={messages} />
