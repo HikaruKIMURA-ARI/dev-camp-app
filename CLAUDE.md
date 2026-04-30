@@ -1,25 +1,26 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+このファイルは、Claude Code (claude.ai/code) がこのリポジトリのコードを扱う際のガイダンスを提供します。
 
-## Commands
+## コマンド
 
-- `bun run dev` — runs the Hono server with `--hot` reload.
-- `bun run start` — runs the server (production-style).
-- `bun run lint` / `lint:fix` — `oxlint` (not ESLint). Categories: correctness=error.
-- `bun run format` / `format:check` — `oxfmt` (not Prettier).
-- `bun run db:generate` — generate a new SQL migration in `drizzle/` from `src/schema.ts`.
-- `bun run db:migrate` — apply migrations via drizzle-kit (note: the server also auto-migrates at startup, see Architecture).
-- `bun run db:push` — push schema directly without a migration file (dev-only shortcut).
-- `bun run db:studio` — open Drizzle Studio against the configured DB.
+- `bun run dev` — Hono サーバーを `--hot` リロード付きで起動します。
+- `bun run start` — サーバーを起動します（本番スタイル）。
+- `bun run lint` / `lint:fix` — `oxlint`（ESLint ではない）。カテゴリ: correctness=error。
+- `bun run format` / `format:check` — `oxfmt`（Prettier ではない）。
+- `bun run db:generate` — `src/schema.ts` から新しい SQL マイグレーションを `drizzle/` に生成します。
+- `bun run db:migrate` — drizzle-kit 経由でマイグレーションを適用します（注: サーバーも起動時に自動マイグレーションを実行します。Architecture 参照）。
+- `bun run db:push` — マイグレーションファイルなしでスキーマを直接プッシュします（開発専用のショートカット）。
+- `bun run db:studio` — 設定済み DB に対して Drizzle Studio を開きます。
 
-No test framework is configured.
+テストフレームワークは設定されていません。
 
 ## TDD (テスト駆動開発) ルール
 
 ### 基本原則
 
 - **テスト哲学に必ず従うこと**: `.claude/rules/testing/test-philosophy.md` を必ず参照すること
+- **実装は skills と agnets を活用すること** `.claude/skills/tdd-workflow/SKILL.md`を参照するこ
 - **テストファースト**: すべての実装はテストを先に書いてから行う
 - **Red-Green-Refactor**: このサイクルを厳密に守る
 - **1 テスト 1 実装**: 一度に 1 つのテストだけを追加し、それを通す実装を書く
@@ -28,22 +29,22 @@ No test framework is configured.
 
 - ユニットテスト: `bun test`
 
-## Architecture
+## アーキテクチャ
 
-This is a server-rendered, htmx-driven web app on Bun. The stack is unusual enough to call out:
+これは Bun 上のサーバーレンダリング・htmx 駆動の Web アプリです。スタックがやや特殊なので、明示的に説明します:
 
-- **Runtime: Bun.** `src/index.tsx` exports a default object `{ port, fetch }` consumed by Bun's built-in HTTP server — there is no separate `serve()` call. `bun run --hot` provides hot reload.
-- **JSX is Hono JSX, not React.** `tsconfig.json` sets `"jsxImportSource": "hono/jsx"`. Components are typed as `FC` from `hono/jsx`. Don't import from `react`. JSX is rendered server-side via `c.html(<Component/>)` and returned as HTML — there is no client-side JS framework.
-- **Interactivity is htmx.** The client only loads `htmx.min.js` (served from `node_modules` via `serveStatic`). Forms/buttons use `hx-*` attributes; handlers return HTML _fragments_ (e.g. `<MessageList/>`) that htmx swaps into the DOM. When adding a new endpoint, decide: full page (return `<Page/>`) vs partial (return just the fragment matching the `hx-target`).
-- **DB: Drizzle + libsql.** Local dev uses a file-backed SQLite (`local.db`); production points `TURSO_DATABASE_URL` at Turso. Same `@libsql/client` works for both. Drizzle dialect in `drizzle.config.ts` is `"turso"`.
-- **Migrations run at import time.** `src/db.ts` calls `await migrate(db, { migrationsFolder: "./drizzle" })` at the top level — the server applies pending migrations on startup. After editing `src/schema.ts`, run `bun run db:generate` to produce a new SQL file under `drizzle/`; the next server start will apply it. Don't hand-edit generated migration SQL.
-- **Styling: pico.css v2.** `pico.min.css` is served directly from `node_modules/@picocss/pico/css/` via `serveStatic` — no build step. Use semantic HTML (`<main class="container">`, `<form role="group">`, etc.) and pico's defaults rather than utility classes.
+- **ランタイム: Bun。** `src/index.tsx` がデフォルトオブジェクト `{ port, fetch }` をエクスポートし、Bun の組み込み HTTP サーバーがそれを消費します — 別途 `serve()` 呼び出しはありません。`bun run --hot` でホットリロードが有効になります。
+- **JSX は Hono JSX であり、React ではない。** `tsconfig.json` で `"jsxImportSource": "hono/jsx"` を設定しています。コンポーネントは `hono/jsx` の `FC` として型付けします。`react` からインポートしてはいけません。JSX は `c.html(<Component/>)` を経由してサーバーサイドでレンダリングされ、HTML として返されます — クライアントサイド JS フレームワークは存在しません。
+- **インタラクティブ性は htmx。** クライアントが読み込むのは `htmx.min.js` のみ（`serveStatic` 経由で `node_modules` から提供）。フォーム / ボタンは `hx-*` 属性を使い、ハンドラは htmx が DOM に差し込む HTML _フラグメント_（例: `<MessageList/>`）を返します。新しいエンドポイントを追加する際は、フルページ（`<Page/>` を返す）かパーシャル（`hx-target` に対応するフラグメントのみを返す）かを判断します。
+- **DB: Drizzle + libsql。** ローカル開発ではファイルバックの SQLite（`local.db`）を使用し、本番では `TURSO_DATABASE_URL` を Turso に向けます。同じ `@libsql/client` が両方で動作します。`drizzle.config.ts` の Drizzle dialect は `"turso"` です。
+- **マイグレーションはインポート時に実行される。** `src/db.ts` がトップレベルで `await migrate(db, { migrationsFolder: "./drizzle" })` を呼び出します — サーバーは起動時に保留中のマイグレーションを適用します。`src/schema.ts` を編集した後は `bun run db:generate` を実行して `drizzle/` 配下に新しい SQL ファイルを生成し、次回サーバー起動時に適用されます。生成されたマイグレーション SQL を手で編集してはいけません。
+- **スタイリング: pico.css v2。** `pico.min.css` は `serveStatic` 経由で `node_modules/@picocss/pico/css/` から直接提供されます — ビルドステップなし。ユーティリティクラスではなく、セマンティック HTML（`<main class="container">`、`<form role="group">` など）と pico のデフォルトを使います。
 
-### Request flow (current app)
+### リクエストフロー（現在のアプリ）
 
-`GET /` renders the full `<Page/>` with the message list. `POST /messages` inserts a row and returns only the `<MessageList/>` fragment, which htmx swaps into `#messages` via `hx-swap="outerHTML"`. This pattern (full page on initial GET, fragment on htmx-driven mutation) is the convention to follow for new features.
+`GET /` は `<Page/>` 全体をメッセージリスト付きでレンダリングします。`POST /messages` は行を挿入し、`<MessageList/>` フラグメントのみを返します。これを htmx が `hx-swap="outerHTML"` で `#messages` に差し込みます。このパターン（初回 GET ではフルページ、htmx 駆動の mutation ではフラグメント）が、新機能でも従うべき規約です。
 
-## UI Standards
+## UI 標準
 
 `ui-optimization` skill / `ui-optimizer` subagent はこのセクションを読んで判断する。プロジェクト固有のデザイン制約はここに集約すること。
 
@@ -88,6 +89,6 @@ This is a server-rendered, htmx-driven web app on Bun. The stack is unusual enou
 - テストファイル
 - `package.json` の依存関係（pico や htmx 以外の UI ライブラリを足さない）
 
-## Environment
+## 環境
 
-`.env` provides `TURSO_DATABASE_URL` (defaults to `file:local.db`) and optional `TURSO_AUTH_TOKEN`. `PORT` defaults to 3000.
+`.env` には `TURSO_DATABASE_URL`（デフォルトは `file:local.db`）と任意の `TURSO_AUTH_TOKEN` を設定します。`PORT` のデフォルトは 3000 です。
