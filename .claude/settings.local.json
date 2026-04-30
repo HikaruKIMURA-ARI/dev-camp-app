@@ -23,5 +23,9 @@
       "Bash(rm -f /tmp/devcamp-pico.png)",
       "WebSearch"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "playwright"
+  ],
+  "enableAllProjectMcpServers": true
 }
