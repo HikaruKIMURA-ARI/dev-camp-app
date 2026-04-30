@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun test && bun run lint && bun run fmt"
+            "command": "bun typecheck && bun test && bun lint && bun fmt"
           }
         ]
       }
