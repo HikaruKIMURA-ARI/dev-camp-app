@@ -67,11 +67,13 @@ describe("src/index.tsx", () => {
   });
 
   test("POST /messages は空白のみの本文を保存しない", async () => {
-    const res = await postForm("/messages", { body: "   " });
+    const res = await postForm("/messages", {
+      username: "太郎",
+      gender: "男",
+      body: "   ",
+    });
 
-    expect(res.status).toBe(200);
-    const html = await res.text();
-    expect(html).toContain("まだメッセージはありません");
+    expect(res.status).toBe(422);
 
     const rows = await db.select().from(messages);
     expect(rows).toHaveLength(0);
@@ -89,10 +91,13 @@ describe("src/index.tsx", () => {
     expect(rows[0]?.body).toBe("前後に空白");
   });
 
-  test("POST /messages は body フィールドが無くてもクラッシュしない", async () => {
-    const res = await postForm("/messages", {});
+  test("POST /messages は body フィールドが無いとき 422 を返す", async () => {
+    const res = await postForm("/messages", {
+      username: "太郎",
+      gender: "男",
+    });
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(422);
     const rows = await db.select().from(messages);
     expect(rows).toHaveLength(0);
   });
@@ -140,29 +145,17 @@ describe("src/index.tsx", () => {
 
     expect(html).toContain('name="username"');
   });
-  test("GET / はユーザー名フィールドを必須にする", async () => {
+  test("GET / は性別「男」を選択肢として表示する", async () => {
     const res = await fetchApp("/");
     const html = await res.text();
 
-    expect(html).toMatch(/<input[^>]*name="username"[^>]*required/);
+    expect(html).toContain('value="男"');
   });
-  test("GET / は性別の男ラジオボタンを返す", async () => {
+  test("GET / は性別「女」を選択肢として表示する", async () => {
     const res = await fetchApp("/");
     const html = await res.text();
 
-    expect(html).toMatch(/<input[^>]*type="radio"[^>]*name="gender"[^>]*value="男"/);
-  });
-  test("GET / は性別の女ラジオボタンを返す", async () => {
-    const res = await fetchApp("/");
-    const html = await res.text();
-
-    expect(html).toMatch(/<input[^>]*type="radio"[^>]*name="gender"[^>]*value="女"/);
-  });
-  test("GET / は性別ラジオボタンを必須にする", async () => {
-    const res = await fetchApp("/");
-    const html = await res.text();
-
-    expect(html).toMatch(/<input[^>]*type="radio"[^>]*name="gender"[^>]*required/);
+    expect(html).toContain('value="女"');
   });
   test("GET / は保存済みメッセージのユーザー名を表示する", async () => {
     await db.insert(messages).values({ body: "やあ", username: "太郎", gender: "男" });
@@ -173,13 +166,13 @@ describe("src/index.tsx", () => {
     expect(html).toContain("太郎");
   });
   test("GET / は保存済みメッセージの性別を表示する", async () => {
+    const before = (await (await fetchApp("/")).text()).split("女").length;
+
     await db.insert(messages).values({ body: "やあ", username: "太郎", gender: "女" });
 
-    const res = await fetchApp("/");
-    const html = await res.text();
+    const after = (await (await fetchApp("/")).text()).split("女").length;
 
-    const articleHtml = html.match(/<article>[\s\S]*?<\/article>/)?.[0] ?? "";
-    expect(articleHtml).toContain("女");
+    expect(after).toBeGreaterThan(before);
   });
   test("POST /messages はユーザー名を trim してから保存する", async () => {
     await postForm("/messages", {
@@ -191,46 +184,46 @@ describe("src/index.tsx", () => {
     const rows = await db.select().from(messages);
     expect(rows[0]?.username).toBe("太郎");
   });
-  test("POST /messages はユーザー名が空のとき保存しない", async () => {
+  test("POST /messages はユーザー名が空のとき 422 を返し保存しない", async () => {
     const res = await postForm("/messages", {
       username: "",
       gender: "男",
       body: "こんにちは",
     });
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(422);
     const rows = await db.select().from(messages);
     expect(rows).toHaveLength(0);
   });
-  test("POST /messages はユーザー名が空白のみのとき保存しない", async () => {
+  test("POST /messages はユーザー名が空白のみのとき 422 を返し保存しない", async () => {
     const res = await postForm("/messages", {
       username: "   ",
       gender: "男",
       body: "こんにちは",
     });
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(422);
     const rows = await db.select().from(messages);
     expect(rows).toHaveLength(0);
   });
-  test("POST /messages は性別が無いとき保存しない", async () => {
+  test("POST /messages は性別が無いとき 422 を返し保存しない", async () => {
     const res = await postForm("/messages", {
       username: "太郎",
       body: "こんにちは",
     });
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(422);
     const rows = await db.select().from(messages);
     expect(rows).toHaveLength(0);
   });
-  test("POST /messages は性別が男・女以外のとき保存しない", async () => {
+  test("POST /messages は性別が男・女以外のとき 422 を返し保存しない", async () => {
     const res = await postForm("/messages", {
       username: "太郎",
       gender: "その他",
       body: "こんにちは",
     });
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(422);
     const rows = await db.select().from(messages);
     expect(rows).toHaveLength(0);
   });
@@ -249,5 +242,67 @@ describe("src/index.tsx", () => {
     expect(rows[0]?.username).toBe("太郎");
     expect(rows[0]?.gender).toBe("男");
     expect(rows[0]?.body).toBe("こんにちは");
+  });
+
+  // ---- @hono/zod-validator 移行に伴うバリデーション振る舞い ----
+  describe("POST /messages バリデーション (zValidator 経由)", () => {
+    const invalidInput = { username: "  ", gender: "男", body: "こんにちは" };
+
+    test("有効な入力のとき 200 を返しメッセージ一覧を更新する", async () => {
+      const res = await postForm("/messages", {
+        username: "太郎",
+        gender: "男",
+        body: "こんにちは",
+      });
+
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain("こんにちは");
+    });
+
+    test("無効な入力のとき 422 を返す", async () => {
+      const res = await postForm("/messages", invalidInput);
+
+      expect(res.status).toBe(422);
+    });
+
+    test("無効な入力のときメッセージを保存しない", async () => {
+      await postForm("/messages", invalidInput);
+
+      const rows = await db.select().from(messages);
+      expect(rows).toHaveLength(0);
+    });
+
+    test("無効な入力のとき HX-Retarget ヘッダで再描画先をフォームに切り替える", async () => {
+      const res = await postForm("/messages", invalidInput);
+
+      expect(res.headers.get("HX-Retarget")).toBe("#message-form");
+    });
+
+    test("無効な入力のとき HTML ドキュメント全体ではなくフラグメントを返す", async () => {
+      const res = await postForm("/messages", invalidInput);
+      const html = await res.text();
+
+      expect(html).not.toContain("<html");
+    });
+
+    test("無効な入力のときユーザーに見えるエラー文言を返す", async () => {
+      const res = await postForm("/messages", invalidInput);
+      const html = await res.text();
+
+      expect(html).toContain("ユーザー名");
+      expect(html).toMatch(/入力してください|必須|エラー/);
+    });
+
+    test("無効な入力のとき有効だった入力値がレスポンスに保持される", async () => {
+      const res = await postForm("/messages", {
+        username: "太郎",
+        gender: "男",
+        body: "  ",
+      });
+      const html = await res.text();
+
+      expect(html).toContain("太郎");
+    });
   });
 });

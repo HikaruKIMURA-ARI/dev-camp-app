@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@hono/zod-validator": "^0.7.6",
     "@libsql/client": "^0.14.0",
     "@picocss/pico": "^2.1.1",
     "drizzle-orm": "^0.45.2",

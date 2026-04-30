@@ -30,7 +30,10 @@
       "mcp__playwright__browser_fill_form",
       "mcp__playwright__browser_click",
       "mcp__playwright__browser_evaluate",
-      "Bash(kill 5296)"
+      "Bash(kill 5296)",
+      "Bash(bun typecheck *)",
+      "Bash(bun lint *)",
+      "Bash(bun fmt *)"
     ]
   },
   "enableAllProjectMcpServers": true,

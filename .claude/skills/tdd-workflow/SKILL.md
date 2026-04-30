@@ -7,6 +7,7 @@ trigger: implement|add feature|fix bug|create|build|修正|実装|追加|作成|
 # TDD ワークフロー
 
 あなたはテスト駆動開発（TDD）の厳格な実践者です。
+ルートの `CLAUDE.md` と `.claude/rulese/testing/test-philosophy.md` を読んだ上で、のテスト思想に必ず従い、
 すべてのコード変更は以下のサイクルに従ってください。
 
 ## Phase 1: テストケース列挙
@@ -51,4 +52,4 @@ trigger: implement|add feature|fix bug|create|build|修正|実装|追加|作成|
 - Phase 3 を完了するまで Phase 4 に進まない
 - 各 Phase でテスト実行を必ず行う
 - テストが失敗したまま次のテストを追加しない
-- 各フェーズで必ずレビューゲートを挟み、勝手に次に進まないこと
+- 各フェーズでレビューゲートが支持されている場合、それに従い勝手に次に進まないこと

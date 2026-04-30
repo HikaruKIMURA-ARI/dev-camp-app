@@ -54,43 +54,81 @@ export const MessageList: FC<{ messages: Message[] }> = ({ messages }) => (
   </section>
 );
 
+export type MessageFormValues = {
+  username?: string;
+  gender?: string;
+  body?: string;
+};
+export type MessageFormErrors = {
+  username?: string;
+  gender?: string;
+  body?: string;
+};
+
+export const MessageForm: FC<{
+  values?: MessageFormValues;
+  errors?: MessageFormErrors;
+}> = ({ values = {}, errors = {} }) => (
+  <form
+    id="message-form"
+    hx-post="/messages"
+    hx-target="#messages"
+    hx-swap="outerHTML"
+    hx-on--after-request="this.reset()"
+    aria-label="メッセージ投稿フォーム"
+  >
+    <label>
+      ユーザー名
+      <input
+        type="text"
+        name="username"
+        placeholder="ユーザー名"
+        required
+        autocomplete="off"
+        value={values.username ?? ""}
+        aria-invalid={errors.username ? "true" : undefined}
+      />
+      {errors.username ? <small>{errors.username}</small> : null}
+    </label>
+
+    <fieldset>
+      <legend>
+        <small>性別</small>
+      </legend>
+      <label style="padding: 0.625rem 0;">
+        <input type="radio" name="gender" value="男" required checked={values.gender === "男"} />男
+      </label>
+      <label style="padding: 0.625rem 0;">
+        <input type="radio" name="gender" value="女" checked={values.gender === "女"} />女
+      </label>
+      {errors.gender ? <small>{errors.gender}</small> : null}
+    </fieldset>
+
+    <label>
+      メッセージ
+      <input
+        type="text"
+        name="body"
+        placeholder="メッセージを入力"
+        required
+        autocomplete="off"
+        value={values.body ?? ""}
+        aria-invalid={errors.body ? "true" : undefined}
+      />
+      {errors.body ? <small>{errors.body}</small> : null}
+    </label>
+
+    <button type="submit">送信</button>
+  </form>
+);
+
 export const Page: FC<{ messages: Message[] }> = ({ messages }) => (
   <Layout>
     <hgroup>
       <h1>メッセージ</h1>
       <p>devcamp</p>
     </hgroup>
-    <form
-      hx-post="/messages"
-      hx-target="#messages"
-      hx-swap="outerHTML"
-      hx-on--after-request="this.reset()"
-      aria-label="メッセージ投稿フォーム"
-    >
-      <label>
-        ユーザー名
-        <input type="text" name="username" placeholder="ユーザー名" required autocomplete="off" />
-      </label>
-
-      <fieldset>
-        <legend>
-          <small>性別</small>
-        </legend>
-        <label style="padding: 0.625rem 0;">
-          <input type="radio" name="gender" value="男" required />男
-        </label>
-        <label style="padding: 0.625rem 0;">
-          <input type="radio" name="gender" value="女" />女
-        </label>
-      </fieldset>
-
-      <label>
-        メッセージ
-        <input type="text" name="body" placeholder="メッセージを入力" required autocomplete="off" />
-      </label>
-
-      <button type="submit">送信</button>
-    </form>
+    <MessageForm />
     <MessageList messages={messages} />
   </Layout>
 );
