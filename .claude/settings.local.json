@@ -20,7 +20,8 @@
       "Bash(\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --headless --disable-gpu --no-sandbox --hide-scrollbars --window-size=1400,900 --screenshot=/tmp/devcamp-pico.png http://localhost:3000/)",
       "Bash(kill b8avqm868 *)",
       "Bash(pkill -f \"bun.*dev\")",
-      "Bash(rm -f /tmp/devcamp-pico.png)"
+      "Bash(rm -f /tmp/devcamp-pico.png)",
+      "WebSearch"
     ]
   }
 }
