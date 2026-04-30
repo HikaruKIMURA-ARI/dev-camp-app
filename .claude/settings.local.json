@@ -21,11 +21,20 @@
       "Bash(kill b8avqm868 *)",
       "Bash(pkill -f \"bun.*dev\")",
       "Bash(rm -f /tmp/devcamp-pico.png)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(curl *)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_resize",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_fill_form",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_evaluate",
+      "Bash(kill 5296)"
     ]
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "playwright"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }

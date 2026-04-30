@@ -1,0 +1,36 @@
+- main [ref=e2]:
+    - generic [ref=e3]:
+        - heading "メッセージ" [level=1] [ref=e4]
+        - paragraph [ref=e5]: devcamp
+    - form "メッセージ投稿フォーム" [ref=e6]:
+        - generic [ref=e7]:
+            - text: ユーザー名
+            - textbox "ユーザー名" [ref=e8]
+        - group "性別" [ref=e9]:
+            - generic [ref=e10]: 性別
+            - generic [ref=e11] [cursor=pointer]:
+                - radio "男" [ref=e12]
+                - text: 男
+            - generic [ref=e13] [cursor=pointer]:
+                - radio "女" [ref=e14]
+                - text: 女
+        - generic [ref=e15]:
+            - text: メッセージ
+            - textbox "メッセージ" [ref=e16]:
+                - /placeholder: メッセージを入力
+        - button "送信" [ref=e17] [cursor=pointer]
+    - generic [ref=e18]:
+        - article [ref=e19]:
+            - generic [ref=e20]:
+                - strong [ref=e21]: fsddsa
+                - text: (女)
+            - paragraph [ref=e22]: fdsadfsa
+            - time [ref=e25]: 4/29 19:22
+        - article [ref=e26]:
+            - strong [ref=e28]: (匿名)
+            - paragraph [ref=e29]: hello
+            - time [ref=e32]: 4/28 18:41
+        - article [ref=e33]:
+            - strong [ref=e35]: (匿名)
+            - paragraph [ref=e36]: bun
+            - time [ref=e39]: 4/28 17:58

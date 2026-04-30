@@ -28,16 +28,19 @@ export const Layout: FC = ({ children }) => (
 );
 
 export const MessageList: FC<{ messages: Message[] }> = ({ messages }) => (
-  <section id="messages">
+  <section id="messages" aria-live="polite">
     {messages.length === 0 ? (
-      <article>
-        <small>まだメッセージはありません</small>
+      <article aria-label="メッセージなし">
+        <p>
+          <small>まだメッセージはありません。最初の一言をどうぞ。</small>
+        </p>
       </article>
     ) : (
       messages.map((m) => (
         <article>
           <header>
-            <strong>{m.username}</strong> <small>({m.gender})</small>
+            <strong>{m.username || "(匿名)"}</strong>{" "}
+            {m.gender ? <small>({m.gender})</small> : null}
           </header>
           <p>{m.body}</p>
           <footer>
@@ -62,17 +65,31 @@ export const Page: FC<{ messages: Message[] }> = ({ messages }) => (
       hx-target="#messages"
       hx-swap="outerHTML"
       hx-on--after-request="this.reset()"
-      role="group"
+      aria-label="メッセージ投稿フォーム"
     >
-      <input type="text" name="username" placeholder="ユーザー名" required autocomplete="off" />
       <label>
-        <input type="radio" name="gender" value="男" required />男
+        ユーザー名
+        <input type="text" name="username" placeholder="ユーザー名" required autocomplete="off" />
       </label>
+
+      <fieldset>
+        <legend>
+          <small>性別</small>
+        </legend>
+        <label style="padding: 0.625rem 0;">
+          <input type="radio" name="gender" value="男" required />男
+        </label>
+        <label style="padding: 0.625rem 0;">
+          <input type="radio" name="gender" value="女" />女
+        </label>
+      </fieldset>
+
       <label>
-        <input type="radio" name="gender" value="女" />女
+        メッセージ
+        <input type="text" name="body" placeholder="メッセージを入力" required autocomplete="off" />
       </label>
-      <input type="text" name="body" placeholder="メッセージを入力" required autocomplete="off" />
-      <input type="submit" value="送信" />
+
+      <button type="submit">送信</button>
     </form>
     <MessageList messages={messages} />
   </Layout>
