@@ -1,6 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
+import { getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
 import { addMessage, listMessages } from "./db";
 import {
@@ -9,6 +10,7 @@ import {
   type MessageFormValues,
   MessageList,
   Page,
+  type Theme,
 } from "./views";
 
 const messageInputSchema = z.object({
@@ -16,6 +18,16 @@ const messageInputSchema = z.object({
   username: z.string().trim().min(1, "ユーザー名を入力してください"),
   gender: z.enum(["男", "女"], { message: "性別を選択してください" }),
 });
+
+const THEME_COOKIE = "theme";
+
+// cookie 値（任意の文字列）から有効な Theme を導出する。
+// 未設定・未知の値は undefined を返し、Layout 側で data-theme 属性自体を省略させる
+// （OS の prefers-color-scheme にフォールバックする意図）。
+const parseTheme = (value: string | undefined): Theme | undefined => {
+  if (value === "dark" || value === "light") return value;
+  return undefined;
+};
 
 const app = new Hono();
 
@@ -27,7 +39,8 @@ app.get(
 
 app.get("/", async (c) => {
   const messages = await listMessages();
-  return c.html(<Page messages={messages} />);
+  const theme = parseTheme(getCookie(c, THEME_COOKIE));
+  return c.html(<Page messages={messages} theme={theme} />);
 });
 
 app.post(
@@ -52,6 +65,13 @@ app.post(
     return c.html(<MessageList messages={messages} />);
   },
 );
+
+app.post("/theme", (c) => {
+  const next: Theme = getCookie(c, THEME_COOKIE) === "dark" ? "light" : "dark";
+  setCookie(c, THEME_COOKIE, next);
+  c.header("HX-Refresh", "true");
+  return c.body(null);
+});
 
 export default {
   port: Number(process.env.PORT ?? 3000),

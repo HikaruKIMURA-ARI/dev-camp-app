@@ -1,5 +1,7 @@
-import type { FC } from "hono/jsx";
+import type { Child, FC } from "hono/jsx";
 import type { Message } from "./schema";
+
+export type Theme = "dark" | "light";
 
 const formatTime = (raw: string) => {
   const d = new Date(raw.replace(" ", "T") + "Z");
@@ -12,8 +14,8 @@ const formatTime = (raw: string) => {
   });
 };
 
-export const Layout: FC = ({ children }) => (
-  <html lang="ja">
+export const Layout: FC<{ theme?: Theme; children?: Child }> = ({ children, theme }) => (
+  <html lang="ja" data-theme={theme}>
     <head>
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -22,7 +24,12 @@ export const Layout: FC = ({ children }) => (
       <script src="/static/htmx.min.js" defer />
     </head>
     <body>
-      <main class="container">{children}</main>
+      <main class="container">
+        <button type="button" class="secondary outline" hx-post="/theme">
+          テーマ切り替え
+        </button>
+        {children}
+      </main>
     </body>
   </html>
 );
@@ -122,8 +129,8 @@ export const MessageForm: FC<{
   </form>
 );
 
-export const Page: FC<{ messages: Message[] }> = ({ messages }) => (
-  <Layout>
+export const Page: FC<{ messages: Message[]; theme?: Theme }> = ({ messages, theme }) => (
+  <Layout theme={theme}>
     <hgroup>
       <h1>メッセージ</h1>
       <p>devcamp</p>

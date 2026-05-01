@@ -305,4 +305,53 @@ describe("src/index.tsx", () => {
       expect(html).toContain("太郎");
     });
   });
+
+  // ---- ダークモード切り替え機能 ----
+  describe("ダークモード切り替え", () => {
+    test('GET / は theme cookie が dark のとき <html data-theme="dark"> で返す', async () => {
+      const res = await fetchApp("/", { headers: { Cookie: "theme=dark" } });
+      const html = await res.text();
+
+      expect(html).toContain('data-theme="dark"');
+    });
+    test('GET / はテーマ切り替えボタン（hx-post="/theme"）を表示する', async () => {
+      const res = await fetchApp("/");
+      const html = await res.text();
+
+      expect(html).toContain('hx-post="/theme"');
+    });
+
+    test("POST /theme は theme cookie が dark のとき theme=light の Set-Cookie を返す", async () => {
+      const res = await fetchApp("/theme", {
+        method: "POST",
+        headers: { Cookie: "theme=dark" },
+      });
+
+      expect(res.headers.get("Set-Cookie")).toContain("theme=light");
+    });
+    test("POST /theme は theme cookie が無いとき theme=dark の Set-Cookie を返す", async () => {
+      const res = await fetchApp("/theme", { method: "POST" });
+
+      expect(res.headers.get("Set-Cookie")).toContain("theme=dark");
+    });
+    test("POST /theme は HX-Refresh: true ヘッダを返す（クライアントに再描画を促す）", async () => {
+      const res = await fetchApp("/theme", { method: "POST" });
+
+      expect(res.headers.get("HX-Refresh")).toBe("true");
+    });
+
+    // ---- バグ修正: light テーマ時に data-theme 属性が出力されない ----
+    test('GET / は theme cookie が light のとき <html data-theme="light"> で返す（OS の prefers-color-scheme より明示指定を優先させる）', async () => {
+      const res = await fetchApp("/", { headers: { Cookie: "theme=light" } });
+      const html = await res.text();
+
+      expect(html).toContain('data-theme="light"');
+    });
+    test("GET / は theme cookie が未設定のとき data-theme 属性を出さない（OS の prefers-color-scheme に従う）", async () => {
+      const res = await fetchApp("/");
+      const html = await res.text();
+
+      expect(html).not.toContain("data-theme");
+    });
+  });
 });

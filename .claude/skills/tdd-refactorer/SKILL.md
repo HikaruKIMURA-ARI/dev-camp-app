@@ -14,7 +14,7 @@ trigger: REFACTOR|リファクタリング|refactor|Phase4
 
 1. リファクタリング後に **必ず** `bun test` を実行する
 2. テストが 1 つでも失敗したら変更を元に戻す
-3. UI に関わる変更があれば `ui-optimization` skill を起動して視覚検査を行う
+3. UI に関わる変更があれば `.claude/skills/ui-optimization` skill を起動して視覚検査を行う
 4. 完了後、必ずユーザーのレビューゲートを挟む
 
 ## リファクタリング観点

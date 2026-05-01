@@ -1,7 +1,7 @@
 ---
 name: ui-optimization
 description: 実装後にローカル dev サーバを Playwright で開いて UI を視覚検査し、汎用基準とプロジェクト UI Standards に基づいて最適化する
-trigger: UI最適化|UI改善|デザイン最適化|デザイン改善|UI確認|スクショ確認
+trigger: UI最適化|UI改善|REFACTOR|リファクタリング|デザイン最適化|デザイン改善|UI確認|スクショ確認
 ---
 
 # UI 最適化ワークフロー
