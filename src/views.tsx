@@ -39,7 +39,7 @@ export const MessageList: FC<{ messages: Message[] }> = ({ messages }) => (
     {messages.length === 0 ? (
       <article aria-label="メッセージなし">
         <p>
-          <small>まだメッセージはありません。最初の一言をどうぞ。</small>
+          <small>まだメッセージはありません。さあ書いてみましょう。</small>
         </p>
       </article>
     ) : (

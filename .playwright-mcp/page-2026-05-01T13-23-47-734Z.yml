@@ -1,0 +1,24 @@
+- main [ref=e2]:
+    - button "テーマ切り替え" [ref=e3] [cursor=pointer]
+    - generic [ref=e4]:
+        - heading "メッセージ" [level=1] [ref=e5]
+        - paragraph [ref=e6]: devcamp
+    - form "メッセージ投稿フォーム" [ref=e7]:
+        - generic [ref=e8]:
+            - text: ユーザー名
+            - textbox "ユーザー名" [ref=e9]
+        - group "性別" [ref=e10]:
+            - generic [ref=e11]: 性別
+            - generic [ref=e12] [cursor=pointer]:
+                - radio "男" [ref=e13]
+                - text: 男
+            - generic [ref=e14] [cursor=pointer]:
+                - radio "女" [ref=e15]
+                - text: 女
+        - generic [ref=e16]:
+            - text: メッセージ
+            - textbox "メッセージ" [ref=e17]:
+                - /placeholder: メッセージを入力
+        - button "送信" [ref=e18] [cursor=pointer]
+    - article "メッセージなし" [ref=e20]:
+        - paragraph [ref=e21]: まだメッセージはありません。最初の一言をどうぞ。

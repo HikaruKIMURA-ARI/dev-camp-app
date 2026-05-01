@@ -2,4 +2,8 @@ node_modules
 .env
 local.db
 local.db-journal
+test-e2e.db
+test-e2e.db-journal
+playwright-report/
+test-results/
 *.log

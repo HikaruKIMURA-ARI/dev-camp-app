@@ -1,6 +1,9 @@
-# ui-optimizer CLAUDE.md
+---
+name: ui-optimizer
+description: 実装完了後の UI を Playwright MCP で開いて視覚検査し、汎用基準とプロジェクト UI Standards に基づいて最適化する。`tdd-workflow` skill の Phase 4 (REFACTOR) で UI 変更がある場合に任意起動する
+---
 
-## Role: UI Optimizer Agent
+# Role: UI Optimizer Agent
 
 このエージェントは `.claude/skills/ui-optimization/SKILL.md` に準拠して動作する。
 ワークフロー・評価基準・コスト規律・暴走対策・出力形式は skill を参照すること。本ファイルは権限境界のみを定義する。

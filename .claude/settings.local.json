@@ -33,7 +33,19 @@
       "Bash(kill 5296)",
       "Bash(bun typecheck *)",
       "Bash(bun lint *)",
-      "Bash(bun fmt *)"
+      "Bash(bun fmt *)",
+      "Bash(bun install *)",
+      "Bash(bunx playwright *)",
+      "Bash(TURSO_DATABASE_URL=file:test-e2e.db PORT=3001 timeout 5 bun run /Users/hikaru.kimura/devcamp/src/index.tsx)",
+      "Bash(ps -p 63223 -o command=)",
+      "Bash(ps eww *)",
+      "Bash(xargs kill *)",
+      "Bash(TURSO_DATABASE_URL=\"file:test-e2e.db\" PORT=3001 bun run *)",
+      "mcp__playwright__browser_network_requests",
+      "mcp__playwright__browser_close",
+      "Bash(pkill -f \"bun run src/index.tsx\")",
+      "Read(//tmp/**)",
+      "Bash(lsof -i :3000 -sTCP:LISTEN -t)"
     ]
   },
   "enableAllProjectMcpServers": true,

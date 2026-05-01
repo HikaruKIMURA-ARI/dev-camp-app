@@ -11,6 +11,8 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "test": "bun test",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "lint": "oxlint --fix",
     "fmt": "oxfmt",
     "typecheck": "tsc --noEmit"
@@ -25,6 +27,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.48.0",
     "@types/bun": "latest",
     "@types/node": "^25.6.0",
     "drizzle-kit": "^0.31.10",

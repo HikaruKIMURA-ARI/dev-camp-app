@@ -29,6 +29,20 @@
 
 - ユニットテスト: `bun test`
 
+## E2E テスト規約
+
+`e2e-test-workflow` skill / `e2e-scenario-writer` / `e2e-test-implementer` subagent はこのセクションを読んで判断する。
+
+- **位置付け**: 機能完成後の後追い。テストピラミッドで最少（ハッピー 2-3 + 異常 1-2）
+- **実装は skills と agents を活用**: `.claude/skills/e2e-test-workflow/SKILL.md` を参照
+- **テストランナー**: `@playwright/test`（`bun run test:e2e`）。`bun test` とは別コマンド
+- **dev サーバ**: `playwright.config.ts` の `webServer` が port 3001 で自動起動（`reuseExistingServer: true` で既存も再利用）。`bun run dev`（port 3000）と非衝突
+- **DB**: 専用ファイル `test-e2e.db`。`tests/e2e/fixtures/db.ts` の `truncateAll()` を `test.beforeEach` で呼ぶ
+- **配置**: `tests/e2e/**/*.spec.ts`、ヘルパは `tests/e2e/fixtures/`
+- **実行モード**: headless 固定（`use.headless: true`）。CI でもローカルでも同じ挙動。デバッグ時のみ `bun run test:e2e:ui` または `bunx playwright test --headed` を使う
+- **CI セットアップ**: 初回 `bunx playwright install --with-deps chromium` でブラウザバイナリ取得が必要
+- **CI フラグ**: `forbidOnly: !!process.env.CI`（`test.only` 残置を阻止）、`retries: 2`（CI のみ）、`workers: 1`（DB 共有のため順次実行）
+
 ## アーキテクチャ
 
 これは Bun 上のサーバーレンダリング・htmx 駆動の Web アプリです。スタックがやや特殊なので、明示的に説明します:
