@@ -10,9 +10,9 @@ tyousei-san
 
 ## Introduction
 
-本機能は、サーバーレンダリング + htmx 構成のリファレンス実装として「調整さん」相当の出欠調整ページを提供する。イベントごとに一意な URL を発行し、認証なしで誰でも回答・閲覧できる。投稿は htmx の部分更新で集計表が即時反映され、フォームは入力値を保持しながら継続入力できる。バリデーションエラーはフラグメント差し戻しで再描画し、入力途中の値を失わない。
+本アプリは、サーバーレンダリング + htmx 構成の単一機能 Web アプリとして「調整さん」相当の出欠調整を提供する（検証用に存在していたメッセージボード等の別機能は撤去し、本仕様の対象外とする）。イベントごとに一意な URL を発行し、認証なしで誰でも回答・閲覧できる。投稿は htmx の部分更新で集計表が即時反映され、フォームは入力値を保持しながら継続入力できる。バリデーションエラーはフラグメント差し戻しで再描画し、入力途中の値を失わない。
 
-データは libsql（ローカルは file-backed SQLite、本番は Turso）に永続化し、マイグレーションは起動時に自動適用する。クライアント JS フレームワークは導入せず、配布される JS は htmx のみとする。
+データは libsql（ローカルは file-backed SQLite、本番は Turso）に永続化し、マイグレーションは起動時に自動適用する。クライアント JS は **htmx を主軸**に据え、タブ・モーダル等のクライアント側状態管理が必要な箇所のみ **Alpine.js** を補助的に併用する（重量級の SPA フレームワークは導入しない）。
 
 ## Boundary Context
 
@@ -48,9 +48,9 @@ tyousei-san
   - Gemini API のレスポンスのキャッシュ・履歴保存（毎回新しく生成し、送信後は破棄）
   - Gemini API の有料枠 / プロジェクト課金設定（無料枠の Rate Limit 内での運用を前提とする）
 - **Adjacent expectations**:
-  - **既存のメッセージボード機能（`/`, `/messages`, `messages` テーブル, `views.tsx` 内の `MessageList` / `MessageForm` 等）には一切依存しない**。tyousei-san 機能は将来単体で残ることが前提で、メッセージボードは削除可能な状態を維持する
-  - `src/db.ts` の単一クライアント・起動時マイグレーション規約を踏襲する（クライアント本体は共有してよいが、テーブル / 関数 / 型はメッセージボードと分離する）
-  - 既存の「初回 GET はフルページ / htmx 経由はフラグメント」規約を遵守する
+  - 本リポジトリは **tyousei-san（出欠調整 + Webhook + 催促）のみ** をプロダクトコードとして持つ。過去の検証用機能（メッセージボード等）のルート・テーブル・ビューは残置しない
+  - `src/db.ts` は単一 libsql クライアントと起動時マイグレーションを維持する
+  - 「初回 GET はフルページ / htmx 経由はフラグメント」の規約を遵守する
 
 ## Requirements
 
@@ -113,21 +113,21 @@ tyousei-san
 4. The Event Service shall 編集中に名前・各候補への回答・カスタム設問への回答のバリデーションを新規登録時と同じルールで実施する
 5. Where イベントにカスタム設問が設定されているとき、the Event Service shall 編集フォームに既存のカスタム設問への回答を初期値として表示する
 
-### Requirement 5: htmx 規約とビュー責務 / 既存機能からの独立
+### Requirement 5: htmx 規約とレイヤ責務（単一アプリ）
 
-**Objective:** As a 開発者, I want このリポジトリの「フルページ vs フラグメント」規約に沿った実装が維持され、かつ tyousei-san 機能が既存メッセージボードに一切依存しない, so that 既存のアーキテクチャ判断と整合し、メッセージボードを後から削除しても tyousei-san が動き続ける
+**Objective:** As a 開発者, I want 「フルページ vs フラグメント」規約とレイヤ分離が一貫した単一出欠調整アプリとして保守できる, so that コードの見通しが良く、拡張やテストが容易である
 
 #### Acceptance Criteria
 
-1. When 利用者が `GET /events/new` または `GET /events/:id` を要求したとき、the Event Service shall `<Layout>` を含むフルページ HTML を返す
-2. When htmx 経由で回答登録 / 編集 / 更新リクエストが送信されたとき、the Event Service shall `<html>` を含まない該当フラグメントだけを返す
-3. The Event Service shall ビューコンポーネント（views）から DB 関数や Hono `Context` を import しない
-4. The Event Service shall データアクセス関数を `src/db.ts` に集約し、ハンドラからは関数経由で呼び出す
-5. The Event Service shall 入力バリデーションを `zValidator` ベースで実装し、ハンドラ内に手書きの型ガードを増やさない
-6. The Event Service shall **メッセージボードのコード（既存の `messages` テーブル / `MessageList` / `MessageForm` / `addMessage` / `listMessages` 等）を import / 参照 / 拡張しない**
-7. The Event Service shall tyousei-san 機能のビュー / DB アクセス関数 / スキーマ / Hono ルート定義を、メッセージボードのファイルとは独立したファイル（または独立したシンボル）として配置する
-8. While `Layout` 等の汎用 UI 部品が必要なとき、the Event Service shall メッセージボード固有でない汎用部品のみを再利用する。汎用化されていない場合は tyousei-san 専用に新規作成する
-9. The Event Service shall ルート `/`（ルートパス）の挙動に依存しない。メッセージボードが削除されても tyousei-san のすべてのページとフラグメントが正常に動作する
+1. When 利用者が `GET /events/new` または `GET /events/:id` または `GET /webhooks` を要求したとき、the Application shall `<Layout>` を含むフルページ HTML を返す
+2. When htmx 経由で回答登録 / 編集 / Webhook 登録 / 催促などのミューテーションが送信されたとき、the Application shall `<html>` を含まない該当フラグメントだけを返す（フルページを返すエンドポイントと混同しない）
+3. The Application shall ビューコンポーネント（`views.tsx` の FC）から DB 関数や Hono `Context` を import しない
+4. The Application shall データアクセス関数を `src/db.ts` に集約し、ハンドラからは関数経由で呼び出す
+5. The Application shall 入力バリデーションを `zValidator` ベースで実装し、ハンドラ内に手書きの型ガードを増やさない
+6. The Application shall コードベースにメッセージボード用のルート・テーブル・コンポーネント（例: `/messages`、`messages` テーブル、`MessageList` 等）を含めない
+7. The Application shall `src/schema.ts` に定義する Drizzle テーブルは、本アプリのドメイン（イベント・回答・Webhook 等）のみとする
+8. The Application shall `Layout` をアプリ全体で共有するシェル（htmx / Alpine.js / pico.css の読み込みを含む）として定義する
+9. When 利用者が `GET /` にアクセスしたとき、the Application shall `/events/new` への HTTP リダイレクト（3xx）を返すか、イベント作成への導線を含むフルページを返す（調整機能がルート未設定で利用不能にならないこと）
 
 ### Requirement 6: 永続化とスキーマ
 
@@ -216,3 +216,18 @@ tyousei-san
 3. The Event Service shall ボタン・リンクのタップ領域を概ね 44px 四方以上で表現する
 4. The Event Service shall pico.css のデフォルト配色を使用し、独自の色指定を行わない
 5. The Event Service shall 集計表のテキストコントラストを WCAG AA 相当（4.5:1）以上で表示する
+
+### Requirement 10: クライアント側状態管理（Alpine.js）
+
+**Objective:** As a 開発者, I want タブ・モーダル等のクライアント側状態を持つ UI を Alpine.js で宣言的に実装できる, so that htmx の部分更新では扱いにくいリッチな UI 状態を、軽量かつ HTML 属性ベースで管理し、独自スクリプトの増殖を防げる
+
+#### Acceptance Criteria
+
+1. When tyousei-san のビューにタブ / モーダル / ドロップダウン / アコーディオン等の **クライアント側状態を持つ UI** を新規追加するとき、the Event Service shall Alpine.js のディレクティブ（`x-data` / `x-show` / `x-on` / `x-bind` 等）でその状態管理を実装する
+2. The Event Service shall Alpine.js を `package.json` の依存に明示的に追加し、`node_modules` から `serveStatic` 経由で配信する（CDN 直リンク・独自バンドル・実行時取得は禁止）
+3. The Event Service shall Alpine.js のスクリプトを `<Layout>` 等の共通レイアウト内で読み込み、`htmx` との初期化順序を確定させる（推奨: Alpine を `defer` で読み込み、htmx の swap 完了後に Alpine が初期化できる構成にする）
+4. The Event Service shall htmx の部分更新で挿入された DOM に対しても Alpine.js が初期化されるよう、`htmx:afterSwap` 等で再初期化が走る構成を維持する
+5. While 単純な表示 / 非表示の制御で済む場合、the Event Service shall pico.css の `<details>` / `<summary>` 等のセマンティック HTML を優先し、Alpine.js は **純粋な HTML / CSS では表現できない状態管理にのみ** 使用する
+6. The Event Service shall Alpine.js のロジックは HTML 属性（`x-*`）として宣言的に書き、`<script>` 内に手書きの DOM 操作コード（`document.querySelector` 等）を増やさない
+7. The Event Service shall モーダル UI を実装するとき、`role="dialog"` / `aria-modal="true"` / フォーカストラップ相当の挙動を Alpine.js で確保し、アクセシビリティを損なわない
+8. The Event Service shall Alpine.js が利用不能（JS 無効・読み込み失敗）な環境でも、フォーム送信・回答登録・閲覧などの **コア機能は htmx の部分更新と通常のフォーム POST で動作する** ことを維持する（プログレッシブエンハンスメント）
