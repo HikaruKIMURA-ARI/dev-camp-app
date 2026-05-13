@@ -2,9 +2,9 @@
 
 実装は古典派 TDD（`.claude/rules/testing/test-philosophy.md`）に従い、`tdd-workflow` skill で各サブタスクを Phase 1-4 で進める。プライベート依存は実体を使い、プロセス外依存（Gemini / Slack）のみモック。共有依存（DB）は `:memory:` + `beforeEach` クリーンアップで隔離する。
 
-- [ ] 1. Foundation: messageboard 撤去とインフラ整備
+- [x] 1. Foundation: messageboard 撤去とインフラ整備
 
-- [ ] 1.1 既存実装のクリーンアップ（最低限の雛形を残して破棄）
+- [x] 1.1 既存実装のクリーンアップ（最低限の雛形を残して破棄）
   - **破棄するもの**:
     - `src/index.tsx` 内の `GET /` / `POST /messages` などメッセージボード用ハンドラと関連 zod schema
     - `src/views.tsx` の `Page` / `MessageList` / `MessageForm` / `formatTime` 等メッセージボード専用コンポーネント
@@ -23,7 +23,7 @@
   - completion: `bun run dev` がエラーなく起動し、`/messages` 含む旧ルートが全て 404、`grep -rE "messages|MessageList|MessageForm|listMessages|addMessage" src/ drizzle/` が一切ヒットしない、`bun test` がテスト 0 件で正常終了する
   - _Requirements: 5.6, 5.7_
 
-- [ ] 1.2 出欠調整ドメインの Drizzle スキーマを定義
+- [x] 1.2 出欠調整ドメインの Drizzle スキーマを定義
   - `events` / `event_options` / `event_responses` / `event_option_responses` / `slack_webhooks` の 5 テーブルを `src/schema.ts` に定義し、全 FK を `onDelete: "cascade"` で結線する
   - `events.id` は uuid 想定の text PK、`events.custom_question` を nullable text、`event_responses.custom_answer` を nullable text として持たせる
   - `event_option_responses.answer` は `○` / `△` / `×` の 3 値のみ受ける前提のカラムとして定義する
@@ -32,13 +32,13 @@
   - completion: 起動時に 5 テーブルが作成され、`bun run db:studio` で構造を目視確認できる
   - _Requirements: 6.1, 6.2, 6.4, 6.5, 6.6, 6.7, 6.8, 7.1_
 
-- [ ] 1.3 db クライアントの単一インスタンスと起動時マイグレーションを維持
+- [x] 1.3 db クライアントの単一インスタンスと起動時マイグレーションを維持
   - `src/db.ts` で libsql クライアントを 1 つだけ生成し export、import 時に `migrate()` を実行
   - 全データアクセス関数（後続タスクで追加される `createEvent` / `getEventWithOptions` / `addResponse` / `updateResponse` / `listWebhooks` / `addWebhook` / `getWebhookById`）をこのファイルに集約する方針を確立し、views / routes が直接 SQL を書かないことを担保する
   - completion: テストで `TURSO_DATABASE_URL=":memory:"` をセットしてから `./db` を動的 import すれば 5 テーブルが立ち上がる
   - _Requirements: 5.3, 5.4, 6.3_
 
-- [ ] 1.4 Alpine.js 導入と Layout 拡張
+- [x] 1.4 Alpine.js 導入と Layout 拡張
   - `package.json` に `alpinejs` を追加し、`node_modules` から `serveStatic` 経由で `/static/alpine.min.js` として配信する（CDN 直リンク禁止）
   - `Layout` の `<head>` で htmx → Alpine の順に `defer` で読み込むよう拡張する
   - `<body>` 末尾に `document.body.addEventListener("htmx:afterSwap", (e) => window.Alpine?.initTree(e.detail.target))` を仕込み、swap 後の DOM でも Alpine が初期化される構成を作る
@@ -47,7 +47,7 @@
   - completion: 次タスクで実装する `/events/new` を開いて `window.Alpine !== undefined`、htmx swap で挿入された DOM 内の `x-data` も初期化される
   - _Requirements: 5.8, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7, 10.8_
 
-- [ ] 1.5 Hono サブアプリ骨格とアプリ組み立て
+- [x] 1.5 Hono サブアプリ骨格とアプリ組み立て
   - `src/routes.tsx` を Hono サブアプリとして作成し、`src/index.tsx` で `app.route("/", routes)` でマウントする
   - `src/index.tsx` は「アプリ組み立て + `serveStatic`（htmx / Alpine / pico）+ テーマ切替 + サブアプリマウント + `{ port, fetch }` export」だけを担い、ハンドラ実装を持たせない
   - `GET /` で 302 を返し `Location: /events/new` にする
@@ -56,7 +56,7 @@
 
 - [ ] 2. イベント作成
 
-- [ ] 2.1 イベント作成フォームのフルページ
+- [x] 2.1 イベント作成フォームのフルページ
   - `GET /events/new` で `<EventNewForm/>` を含むフルページを返す
   - タイトル入力、候補日時の動的追加（Alpine の `x-data` で行を追加・削除）、任意のカスタム設問入力欄を備える
   - 全 input に `<label>` を関連付け、pico.css のセマンティック要素で組む。タップ領域は概ね 44px 四方以上を確保し、pico.css のデフォルト配色のみ使用する
@@ -181,7 +181,7 @@
 
 - [ ] 8. E2E テスト
 
-- [ ] 8.1 イベント作成→回答→集計の E2E
+- [ ] 8.1 イベント作成 → 回答 → 集計の E2E
   - `tests/e2e/events.spec.ts` を新規作成。ハッピーパス: イベント作成（タイトル + 候補 2 件 + カスタム設問）→ 発行 URL を訪問 → 出欠 + カスタム設問の自由記述で回答 → 集計表に反映、参加者行にカスタム設問の回答が表示される
   - 異常系: 不在イベント URL で 404 ページ、候補 0 件で作成しようとすると 422 でフォームに差し戻され入力値が保持される
   - `truncateAll()` を `beforeEach` で実行する（`tests/e2e/fixtures/db.ts`）

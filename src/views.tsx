@@ -1,18 +1,57 @@
 import type { Child, FC } from "hono/jsx";
-import type { Message } from "./schema";
 
 export type Theme = "dark" | "light";
 
-const formatTime = (raw: string) => {
-  const d = new Date(raw.replace(" ", "T") + "Z");
-  if (Number.isNaN(d.getTime())) return raw;
-  return d.toLocaleString("ja-JP", {
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
+export const EventNewForm: FC = () => (
+  <form method="post" action="/events">
+    <label>
+      イベント名
+      <input type="text" name="title" required maxlength={200} />
+    </label>
+
+    <fieldset x-data="{ extras: [] }">
+      <legend>候補日時</legend>
+
+      <label>
+        候補 1
+        <input type="datetime-local" name="options" required />
+      </label>
+
+      <template x-for="(_, index) in extras" x-bind:key="index">
+        <label>
+          <span x-text="`候補 ${index + 2}`"></span>
+          <div role="group">
+            <input
+              type="datetime-local"
+              name="options"
+              required
+              x-bind:aria-label="`候補 ${index + 2}`"
+            />
+            <button
+              type="button"
+              class="secondary outline"
+              aria-label="削除"
+              x-on:click="extras.splice(index, 1)"
+            >
+              ✕
+            </button>
+          </div>
+        </label>
+      </template>
+
+      <button type="button" class="secondary" x-on:click="extras.push('')">
+        候補を追加
+      </button>
+    </fieldset>
+
+    <label>
+      カスタム設問（任意）
+      <input type="text" name="customQuestion" maxlength={200} />
+    </label>
+
+    <button type="submit">作成</button>
+  </form>
+);
 
 export const Layout: FC<{ theme?: Theme; children?: Child }> = ({ children, theme }) => (
   <html lang="ja" data-theme={theme}>
@@ -22,6 +61,7 @@ export const Layout: FC<{ theme?: Theme; children?: Child }> = ({ children, them
       <title>devcamp</title>
       <link rel="stylesheet" href="/static/pico.min.css" />
       <script src="/static/htmx.min.js" defer />
+      <script src="/static/alpine.min.js" defer />
     </head>
     <body>
       <main class="container">
@@ -30,112 +70,12 @@ export const Layout: FC<{ theme?: Theme; children?: Child }> = ({ children, them
         </button>
         {children}
       </main>
+      <script
+        dangerouslySetInnerHTML={{
+          __html:
+            'document.body.addEventListener("htmx:afterSwap",(e)=>window.Alpine?.initTree(e.detail.target));',
+        }}
+      />
     </body>
   </html>
-);
-
-export const MessageList: FC<{ messages: Message[] }> = ({ messages }) => (
-  <section id="messages" aria-live="polite">
-    {messages.length === 0 ? (
-      <article aria-label="メッセージなし">
-        <p>
-          <small>まだメッセージはありません。さあ書いてみましょう。</small>
-        </p>
-      </article>
-    ) : (
-      messages.map((m) => (
-        <article>
-          <header>
-            <strong>{m.username || "(匿名)"}</strong>{" "}
-            {m.gender ? <small>({m.gender})</small> : null}
-          </header>
-          <p>{m.body}</p>
-          <footer>
-            <small>
-              <time datetime={m.createdAt}>{formatTime(m.createdAt)}</time>
-            </small>
-          </footer>
-        </article>
-      ))
-    )}
-  </section>
-);
-
-export type MessageFormValues = {
-  username?: string;
-  gender?: string;
-  body?: string;
-};
-export type MessageFormErrors = {
-  username?: string;
-  gender?: string;
-  body?: string;
-};
-
-export const MessageForm: FC<{
-  values?: MessageFormValues;
-  errors?: MessageFormErrors;
-}> = ({ values = {}, errors = {} }) => (
-  <form
-    id="message-form"
-    hx-post="/messages"
-    hx-target="#messages"
-    hx-swap="outerHTML"
-    hx-on--after-request="this.reset()"
-    aria-label="メッセージ投稿フォーム"
-  >
-    <label>
-      ユーザー名
-      <input
-        type="text"
-        name="username"
-        placeholder="ユーザー名"
-        required
-        autocomplete="off"
-        value={values.username ?? ""}
-        aria-invalid={errors.username ? "true" : undefined}
-      />
-      {errors.username ? <small>{errors.username}</small> : null}
-    </label>
-
-    <fieldset>
-      <legend>
-        <small>性別</small>
-      </legend>
-      <label style="padding: 0.625rem 0;">
-        <input type="radio" name="gender" value="男" required checked={values.gender === "男"} />男
-      </label>
-      <label style="padding: 0.625rem 0;">
-        <input type="radio" name="gender" value="女" checked={values.gender === "女"} />女
-      </label>
-      {errors.gender ? <small>{errors.gender}</small> : null}
-    </fieldset>
-
-    <label>
-      メッセージ
-      <input
-        type="text"
-        name="body"
-        placeholder="メッセージを入力"
-        required
-        autocomplete="off"
-        value={values.body ?? ""}
-        aria-invalid={errors.body ? "true" : undefined}
-      />
-      {errors.body ? <small>{errors.body}</small> : null}
-    </label>
-
-    <button type="submit">送信</button>
-  </form>
-);
-
-export const Page: FC<{ messages: Message[]; theme?: Theme }> = ({ messages, theme }) => (
-  <Layout theme={theme}>
-    <hgroup>
-      <h1>メッセージ</h1>
-      <p>devcamp</p>
-    </hgroup>
-    <MessageForm />
-    <MessageList messages={messages} />
-  </Layout>
 );

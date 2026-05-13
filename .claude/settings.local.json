@@ -45,7 +45,15 @@
       "mcp__playwright__browser_close",
       "Bash(pkill -f \"bun run src/index.tsx\")",
       "Read(//tmp/**)",
-      "Bash(lsof -i :3000 -sTCP:LISTEN -t)"
+      "Bash(lsof -i :3000 -sTCP:LISTEN -t)",
+      "Skill(kiro:spec-design)",
+      "Bash(echo \"typecheck=$?\")",
+      "Bash(echo \"after-test=$?\")",
+      "Bash(lsof -nP -iTCP -sTCP:LISTEN)",
+      "Bash(bun --print 'import\\(\"./src/views.tsx\"\\).then\\(m => console.log\\(JSON.stringify\\(m.EventNewForm\\(\\)\\)\\)\\)')",
+      "Bash(bun *)",
+      "Bash(kill 54330 60719)",
+      "Bash(PORT=8686 bun run --hot src/index.tsx)"
     ]
   },
   "enableAllProjectMcpServers": true,
