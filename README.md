@@ -5,7 +5,7 @@
 ## スタック
 
 - **Runtime**: Bun
-- **Web**: Hono + JSX (SSR) + HTMX + Alpine.js
+- **Web**: Hono + HTMX
 - **CSS**: Pico CSS
 - **DB**: libSQL (Turso) + Drizzle ORM
 - **Test**: `bun test` (unit) / Playwright (E2E)
