@@ -64,7 +64,7 @@
   - completion: `GET /events/new` で 200 とフォームが表示され、Alpine の候補追加・削除が動く
   - _Requirements: 1.1, 5.1, 9.1, 9.2, 9.3, 9.4, 10.1_
 
-- [ ] 2.2 イベント作成の永続化と差し戻し
+- [x] 2.2 イベント作成の永続化と差し戻し
   - `POST /events` を **htmx を介さない通常フォーム送信**として受け、`zValidator("form", eventCreateSchema)` で `title` 1..200 / `options` 1+ 件・各 1..200・重複なし / `customQuestion?` 0..200 を検証
   - `crypto.randomUUID()` で event ID を生成し、`events` + `event_options` を単一 tx で永続化、`customQuestion` 空文字は null として保存
   - 成功時は 302 で `/events/:id` にリダイレクト
@@ -74,7 +74,7 @@
 
 - [ ] 3. イベント閲覧と集計
 
-- [ ] 3.1 イベント閲覧フルページと集計表示
+- [x] 3.1 イベント閲覧フルページと集計表示
   - `GET /events/:id` で `<EventPage>`（`<Layout>` 内包）を返す
   - `getEventWithOptions` でイベント・候補・参加者・回答・候補ごとの ○/△/× 集計を取得し `<ResponsesTable/>` で表示
   - 参加者を登録順（古い順）で表示し、候補ごとに ○/△/× の人数を集計行として描画
@@ -87,7 +87,7 @@
 
 - [ ] 4. 参加者の回答登録と更新
 
-- [ ] 4.1 回答登録（htmx フラグメント差し替え）
+- [x] 4.1 回答登録（htmx フラグメント差し替え）
   - `POST /events/:id/responses` で `zValidator("form", responseSchema)` を実行（`name` 1..100、`answers` キーが該当候補 ID で値 `○|△|×` のみ、`customAnswer?` 0..500）
   - `event_responses` + `event_option_responses` を単一 tx で永続化し、`customAnswer` は空文字を空文字のまま保存する（空文字を許容）
   - 回答フォームのカスタム設問入力欄は自由記述（プレーンテキスト）のみとし、ラジオ / チェックボックス / 数値入力等は提供しない
