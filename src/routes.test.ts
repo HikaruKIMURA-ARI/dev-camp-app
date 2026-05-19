@@ -3693,4 +3693,54 @@ describe("routes (Hono sub-app) mounted on app", () => {
       expect(body).toContain('data-theme="light"');
     });
   });
+
+  /**
+   * 共通ヘッダー（Layout のヘッダー領域）に関するテストケースを列挙する。
+   *
+   * 設計メモ:
+   *  - Bun の `it.todo` は `fn` 引数が必須のため、本ファイルでは `() => {}` を渡している。
+   */
+  describe("共通ヘッダー（Layout のヘッダー領域）", () => {
+    // Arrange: Layout を経由するページ（GET /events/new）のレスポンス本文を共有する
+    let body: string;
+    let bodyOutsideHeader: string;
+
+    beforeEach(async () => {
+      const request = new Request("http://localhost:8787/events/new");
+      const response = await app.fetch(request);
+      body = await response.text();
+      // <header>...</header> を除いた残部。
+      // 「テーマ切り替えボタンがヘッダー以外の場所（特に <main>）に存在しない」ことを
+      // 文字列マッチでロバストに検証するため、ヘッダー領域を 1 回だけ取り除いた残りを保持する。
+      bodyOutsideHeader = body.replace(/<header\b[\s\S]*?<\/header>/, "");
+    });
+
+    it("Layout を経由するページ（GET /events/new）のレスポンスに <header> 要素が含まれる", () => {
+      // Act + Assert
+      expect(body).toContain("<header");
+    });
+
+    it("ヘッダー内にサービス名「BI調整San」が表示される", () => {
+      // Act: ヘッダー領域だけを切り出す
+      const headerMatch = body.match(/<header\b[\s\S]*?<\/header>/);
+      const headerHtml = headerMatch ? headerMatch[0] : "";
+
+      // Assert: サービス名がヘッダー内に含まれる
+      expect(headerHtml).toContain("BI調整San");
+    });
+
+    it('ヘッダー内にテーマ切り替えボタン（hx-post="/theme" を持つボタン）が含まれる', () => {
+      // Act: ヘッダー領域だけを切り出す
+      const headerMatch = body.match(/<header\b[\s\S]*?<\/header>/);
+      const headerHtml = headerMatch ? headerMatch[0] : "";
+
+      // Assert: テーマ切り替えボタンの hx-post 属性がヘッダー内に含まれる
+      expect(headerHtml).toContain('hx-post="/theme"');
+    });
+
+    it('テーマ切り替えボタンは <main class="container"> の直下には存在しない（ヘッダーへの移動であり重複追加ではない）', () => {
+      // Act + Assert: <header>...</header> を除いた残部に hx-post="/theme" が現れないこと
+      expect(bodyOutsideHeader).not.toContain('hx-post="/theme"');
+    });
+  });
 });
