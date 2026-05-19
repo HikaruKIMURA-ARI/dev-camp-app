@@ -151,3 +151,35 @@ export const addResponse = async (
     return { responseId };
   });
 };
+
+export const getResponseById = async (responseId: number): Promise<EventResponse | null> => {
+  const [row] = await db.select().from(eventResponses).where(eq(eventResponses.id, responseId));
+  return row ?? null;
+};
+
+export const updateResponse = async (
+  _eventId: string,
+  responseId: number,
+  input: ResponseInput,
+): Promise<boolean> => {
+  await db.transaction(async (tx) => {
+    await tx
+      .update(eventResponses)
+      .set({ name: input.name, customAnswer: input.customAnswer ?? null })
+      .where(eq(eventResponses.id, responseId));
+
+    await tx.delete(eventOptionResponses).where(eq(eventOptionResponses.responseId, responseId));
+
+    const entries = Object.entries(input.answers);
+    if (entries.length > 0) {
+      await tx.insert(eventOptionResponses).values(
+        entries.map(([optionId, answer]) => ({
+          responseId,
+          optionId: Number(optionId),
+          answer,
+        })),
+      );
+    }
+  });
+  return true;
+};

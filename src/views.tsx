@@ -122,41 +122,73 @@ export const ResponsesTable: FC<{
     return <p>まだ回答がありません</p>;
   }
 
+  const circleCounts = options.map((o) => aggregates[String(o.id)]?.circle ?? 0);
+  const maxCircle = Math.max(0, ...circleCounts);
+  const isTopPick = (optionId: number): boolean =>
+    maxCircle > 0 && (aggregates[String(optionId)]?.circle ?? 0) === maxCircle;
+  // pico.css の CSS 変数で配色するため、ライト / ダーク両テーマで自動追従する。
+  const topPickHeaderStyle =
+    "background-color: var(--pico-primary-background); color: var(--pico-primary-inverse);";
+  const topPickCellStyle = "background-color: var(--pico-primary-focus);";
+  const topPickAggregateStyle = "background-color: var(--pico-primary-focus); font-weight: bold;";
+  const topPickHeaderAttr = (optionId: number) =>
+    isTopPick(optionId) ? { "data-top-pick": "true", style: topPickHeaderStyle } : {};
+  const topPickCellAttr = (optionId: number) =>
+    isTopPick(optionId) ? { "data-top-pick": "true", style: topPickCellStyle } : {};
+  const topPickAggregateAttr = (optionId: number) =>
+    isTopPick(optionId) ? { "data-top-pick": "true", style: topPickAggregateStyle } : {};
+
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>名前</th>
-          {options.map((option) => (
-            <th>{formatOptionLabel(option.label)}</th>
-          ))}
-          {showCustomColumn ? <th>カスタム回答</th> : null}
-        </tr>
-      </thead>
-      <tbody>
-        {responses.map((response) => (
+    <figure style="overflow-x: auto;">
+      <table>
+        <thead>
           <tr>
-            <td>{response.name}</td>
+            <th>名前</th>
             {options.map((option) => (
-              <td>{response.answers[String(option.id)] ?? ""}</td>
+              <th {...topPickHeaderAttr(option.id)}>{formatOptionLabel(option.label)}</th>
             ))}
-            {showCustomColumn ? <td>{response.customAnswer ?? ""}</td> : null}
+            {showCustomColumn ? <th>カスタム回答</th> : null}
+            <th scope="col">操作</th>
           </tr>
-        ))}
-        <tr>
-          <td>集計</td>
-          {options.map((option) => {
-            const agg = aggregates[String(option.id)] ?? { circle: 0, triangle: 0, cross: 0 };
-            return (
+        </thead>
+        <tbody>
+          {responses.map((response) => (
+            <tr>
+              <td>{response.name}</td>
+              {options.map((option) => (
+                <td {...topPickCellAttr(option.id)}>{response.answers[String(option.id)] ?? ""}</td>
+              ))}
+              {showCustomColumn ? <td>{response.customAnswer ?? ""}</td> : null}
               <td>
-                ○ {agg.circle} △ {agg.triangle} × {agg.cross}
+                <button
+                  type="button"
+                  class="secondary outline"
+                  hx-get={`/events/${event.id}/responses/${response.id}/edit`}
+                  hx-target="closest tr"
+                  hx-swap="outerHTML"
+                  aria-label={`${response.name} の回答を編集`}
+                >
+                  編集
+                </button>
               </td>
-            );
-          })}
-          {showCustomColumn ? <td></td> : null}
-        </tr>
-      </tbody>
-    </table>
+            </tr>
+          ))}
+          <tr>
+            <td>集計</td>
+            {options.map((option) => {
+              const agg = aggregates[String(option.id)] ?? { circle: 0, triangle: 0, cross: 0 };
+              return (
+                <td {...topPickAggregateAttr(option.id)}>
+                  ○ {agg.circle} △ {agg.triangle} × {agg.cross}
+                </td>
+              );
+            })}
+            {showCustomColumn ? <td></td> : null}
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+    </figure>
   );
 };
 
@@ -181,20 +213,115 @@ export const EventPage: FC<{
           <strong>設問:</strong> {event.customQuestion}
         </p>
       ) : null}
-      <ResponsesTable
-        event={event}
-        options={options}
-        responses={responses}
-        aggregates={aggregates}
-      />
-      <form method="post" action={`/events/${event.id}/responses`}>
-        <label>
-          名前
-          <input type="text" name="name" required />
-        </label>
-        <button type="submit">回答する</button>
-      </form>
+      <div id="responses">
+        <ResponsesTable
+          event={event}
+          options={options}
+          responses={responses}
+          aggregates={aggregates}
+        />
+      </div>
+      <hr />
+      <h2>回答する</h2>
+      <ResponseFormRow event={event} options={options} mode="create" />
     </article>
+  );
+};
+
+export const ResponseFormRow: FC<{
+  event: Event;
+  options: EventOption[];
+  mode: "create" | "edit";
+  responseId?: number;
+  values?: { name?: string; answers?: Record<string, Answer>; customAnswer?: string };
+  errors?: string[];
+}> = ({ event, options, mode, responseId, values, errors }) => {
+  const nameValue = values?.name ?? "";
+  const answersValue = values?.answers ?? {};
+  const customAnswerValue = values?.customAnswer ?? "";
+  const showCustomQuestion = hasCustomQuestion(event);
+  const answerChoices: Answer[] = ["○", "△", "×"];
+
+  const isEdit = mode === "edit" && responseId !== undefined;
+
+  // 編集モード時のテーブル列数: 名前 + 候補数 + (カスタム回答?) + 操作
+  const editColspan = 1 + options.length + (showCustomQuestion ? 1 : 0) + 1;
+
+  const formNode = (
+    <form
+      method={isEdit ? undefined : "post"}
+      action={isEdit ? undefined : `/events/${event.id}/responses`}
+      hx-post={isEdit ? undefined : `/events/${event.id}/responses`}
+      hx-put={isEdit ? `/events/${event.id}/responses/${responseId}` : undefined}
+      hx-target="#responses"
+      hx-swap="outerHTML"
+      {...(isEdit ? {} : { "hx-on::after-request": "this.reset()" })}
+    >
+      {errors && errors.length > 0 ? (
+        <ul role="alert">
+          {errors.map((message) => (
+            <li>{message}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      <label>
+        名前
+        <input type="text" name="name" required maxlength={100} value={nameValue} />
+      </label>
+
+      {options.map((option) => (
+        <fieldset>
+          <legend>{formatOptionLabel(option.label)}</legend>
+          <div style="display:flex; flex-wrap:wrap; gap:.5rem;">
+            {answerChoices.map((choice) => (
+              <label style="display:inline-flex; align-items:center; gap:.5rem; min-height:2.75rem; padding:.25rem .75rem; margin:0;">
+                <input
+                  type="radio"
+                  name={`answers[${option.id}]`}
+                  value={choice}
+                  required
+                  checked={answersValue[String(option.id)] === choice}
+                  style="margin:0;"
+                />
+                {choice}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ))}
+
+      {showCustomQuestion ? (
+        <label>
+          {event.customQuestion}
+          <input type="text" name="customAnswer" maxlength={500} value={customAnswerValue} />
+        </label>
+      ) : null}
+
+      <div role="group">
+        <button type="submit">{mode === "edit" ? "更新する" : "回答する"}</button>
+        {isEdit ? (
+          <button
+            type="button"
+            class="secondary outline"
+            hx-get={`/events/${event.id}`}
+            hx-target="#responses"
+            hx-select="#responses"
+            hx-swap="outerHTML"
+          >
+            キャンセル
+          </button>
+        ) : null}
+      </div>
+    </form>
+  );
+
+  if (!isEdit) return formNode;
+
+  return (
+    <tr>
+      <td colspan={editColspan}>{formNode}</td>
+    </tr>
   );
 };
 

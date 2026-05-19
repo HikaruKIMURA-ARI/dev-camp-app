@@ -1,13 +1,21 @@
 import { type Context, Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
-import { addResponse, createEvent, getEventWithOptions } from "./db";
+import {
+  type Answer,
+  addResponse,
+  createEvent,
+  getEventWithOptions,
+  getResponseById,
+  updateResponse,
+} from "./db";
 import {
   EventNewForm,
   type EventNewFormValues,
   EventPage,
   Layout,
   NotFoundPage,
+  ResponseFormRow,
   ResponsesTable,
   type Theme,
 } from "./views";
@@ -131,60 +139,152 @@ const parseAnswersFromBody = (body: Record<string, unknown>): Record<string, str
   return answers;
 };
 
+// 回答送信フォーム（POST 新規 / PUT 編集）の生入力。
+type RawResponseSubmission = {
+  name: string;
+  customAnswer: string | undefined;
+  answers: Record<string, string>;
+};
+
+const readResponseSubmission = async (c: Context): Promise<RawResponseSubmission> => {
+  const body = await c.req.parseBody({ all: true });
+  return {
+    name: typeof body.name === "string" ? body.name : "",
+    customAnswer: typeof body.customAnswer === "string" ? body.customAnswer : undefined,
+    answers: parseAnswersFromBody(body),
+  };
+};
+
+// 422 差し戻し時のレスポンス本文。送信値（name / customAnswer）の文字列保持のみを
+// 観察可能な振る舞いとして担保する最小プレースホルダ。HTML 構造の本格復元は後続タスクで対応する。
+const renderResponseValidationError = (c: Context, raw: RawResponseSubmission) =>
+  c.html(
+    <div>
+      <span>{raw.name}</span>
+      <span>{raw.customAnswer ?? ""}</span>
+    </div>,
+    422,
+  );
+
+// 回答送信のバリデーション（スキーマ + クロス参照検証）。
+// 成功すれば validated を、失敗すれば 422 レスポンスを返す。
+const validateResponseSubmission = (
+  c: Context,
+  raw: RawResponseSubmission,
+  validOptionIds: ReadonlySet<string>,
+):
+  | {
+      ok: true;
+      data: { name: string; answers: Record<string, Answer>; customAnswer: string | null };
+    }
+  | { ok: false; response: Response | Promise<Response> } => {
+  const parsed = responseSchema.safeParse({
+    name: raw.name,
+    answers: raw.answers,
+    customAnswer: raw.customAnswer,
+  });
+  if (!parsed.success) {
+    return { ok: false, response: renderResponseValidationError(c, raw) };
+  }
+
+  // クロス参照検証: 送信された optionId 集合と当該イベントの候補 ID 集合が完全一致すること。
+  // 未知 ID の混入と、候補に対する回答欠落の両方をここで検出する。
+  const submittedOptionIds = new Set(Object.keys(parsed.data.answers));
+  const hasUnknownOption = [...submittedOptionIds].some((oid) => !validOptionIds.has(oid));
+  const hasMissingOption = [...validOptionIds].some((oid) => !submittedOptionIds.has(oid));
+  if (hasUnknownOption || hasMissingOption) {
+    return { ok: false, response: renderResponseValidationError(c, raw) };
+  }
+
+  return {
+    ok: true,
+    data: {
+      name: parsed.data.name,
+      answers: parsed.data.answers as Record<string, Answer>,
+      customAnswer: parsed.data.customAnswer ?? null,
+    },
+  };
+};
+
+// 回答書き込み後の共通レスポンス: 最新状態を再取得して集計表フラグメントを返す。
+// htmx の `#responses` ターゲットと整合させるため、外側を id 付きラッパで囲む。
+const renderResponsesTableFragment = async (c: Context, eventId: string) => {
+  const updated = await getEventWithOptions(eventId);
+  if (!updated) return c.notFound();
+  return c.html(
+    <div id="responses">
+      <ResponsesTable
+        event={updated.event}
+        options={updated.options}
+        responses={updated.responses}
+        aggregates={updated.aggregates}
+      />
+    </div>,
+  );
+};
+
 routes.post("/events/:id/responses", async (c) => {
   const id = c.req.param("id");
 
   const data = await getEventWithOptions(id);
   if (!data) return c.notFound();
 
-  const body = await c.req.parseBody({ all: true });
-  const rawName = typeof body.name === "string" ? body.name : "";
-  const rawCustomAnswer = typeof body.customAnswer === "string" ? body.customAnswer : undefined;
-  const rawAnswers = parseAnswersFromBody(body);
-
-  // 422 差し戻し時のレスポンス本文（送信値を保持するための最小プレースホルダ）。
-  // 本格的なフォーム再描画は後続タスクで対応する。
-  const renderValidationError = () =>
-    c.html(
-      <div>
-        <span>{rawName}</span>
-        <span>{rawCustomAnswer ?? ""}</span>
-      </div>,
-      422,
-    );
-
-  const parsed = responseSchema.safeParse({
-    name: rawName,
-    answers: rawAnswers,
-    customAnswer: rawCustomAnswer,
-  });
-  if (!parsed.success) return renderValidationError();
-
-  // クロス参照検証: 送信された optionId 集合と当該イベントの候補 ID 集合が完全一致すること。
-  // 未知 ID の混入と、候補に対する回答欠落の両方をここで検出する。
+  const raw = await readResponseSubmission(c);
   const validOptionIds = new Set(data.options.map((o) => String(o.id)));
-  const submittedOptionIds = new Set(Object.keys(parsed.data.answers));
-  const hasUnknownOption = [...submittedOptionIds].some((oid) => !validOptionIds.has(oid));
-  const hasMissingOption = [...validOptionIds].some((oid) => !submittedOptionIds.has(oid));
-  if (hasUnknownOption || hasMissingOption) return renderValidationError();
+  const validated = validateResponseSubmission(c, raw, validOptionIds);
+  if (!validated.ok) return validated.response;
 
-  await addResponse(id, {
-    name: parsed.data.name,
-    answers: parsed.data.answers,
-    customAnswer: parsed.data.customAnswer ?? null,
-  });
+  await addResponse(id, validated.data);
 
-  const updated = await getEventWithOptions(id);
-  if (!updated) return c.notFound();
+  return renderResponsesTableFragment(c, id);
+});
+
+routes.get("/events/:id/responses/:responseId/edit", async (c) => {
+  const eventId = c.req.param("id");
+  const responseId = Number(c.req.param("responseId"));
+
+  const data = await getEventWithOptions(eventId);
+  if (!data) return c.notFound();
+
+  const responseRow = await getResponseById(responseId);
+  if (!responseRow || responseRow.eventId !== eventId) return c.notFound();
+
+  const targetResponse = data.responses.find((r) => r.id === responseId);
+  const answers = targetResponse?.answers ?? {};
 
   return c.html(
-    <ResponsesTable
-      event={updated.event}
-      options={updated.options}
-      responses={updated.responses}
-      aggregates={updated.aggregates}
+    <ResponseFormRow
+      event={data.event}
+      options={data.options}
+      mode="edit"
+      responseId={responseId}
+      values={{
+        name: responseRow.name,
+        answers,
+        customAnswer: responseRow.customAnswer ?? undefined,
+      }}
     />,
   );
+});
+
+routes.put("/events/:id/responses/:responseId", async (c) => {
+  const eventId = c.req.param("id");
+  const responseId = Number(c.req.param("responseId"));
+
+  const data = await getEventWithOptions(eventId);
+  if (!data) return c.notFound();
+
+  const responseRow = await getResponseById(responseId);
+  if (!responseRow || responseRow.eventId !== eventId) return c.notFound();
+
+  const raw = await readResponseSubmission(c);
+  const validOptionIds = new Set(data.options.map((o) => String(o.id)));
+  const validated = validateResponseSubmission(c, raw, validOptionIds);
+  if (!validated.ok) return validated.response;
+
+  await updateResponse(eventId, responseId, validated.data);
+
+  return renderResponsesTableFragment(c, eventId);
 });
 
 export default routes;

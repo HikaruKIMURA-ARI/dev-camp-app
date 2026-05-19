@@ -232,7 +232,6 @@ describe("routes (Hono sub-app) mounted on app", () => {
     let schema: typeof import("./schema");
 
     beforeAll(async () => {
-      process.env.TURSO_DATABASE_URL = ":memory:";
       const dbMod = await import("./db");
       database = dbMod.db;
       schema = await import("./schema");
@@ -720,7 +719,6 @@ describe("routes (Hono sub-app) mounted on app", () => {
     let schema: typeof import("./schema");
 
     beforeAll(async () => {
-      process.env.TURSO_DATABASE_URL = ":memory:";
       const dbMod = await import("./db");
       database = dbMod.db;
       schema = await import("./schema");
@@ -985,13 +983,12 @@ describe("routes (Hono sub-app) mounted on app", () => {
         const body = await response.text();
 
         // Assert
-        // 集計の数値は参加者数に依存して描画される想定なので、
-        // 0 名のときは「0 人」や ○/△/× の集計行に対応する文字列が出ない、を観察する。
-        // ここでは単純に ○ / △ / × の絵文字が描画されていないことを assert する
-        //（候補ラベル / 集計セル両方に出る可能性があるが、参加者 0 名なら集計行も回答行も不要なはず）。
-        expect(body).not.toContain("○");
-        expect(body).not.toContain("△");
-        expect(body).not.toContain("×");
+        // 0 件のとき `ResponsesTable` は `<p>まだ回答がありません</p>` を返すため、
+        // 集計行（および参加者行）が描画されないことは「集計表 <table> が存在しない」で
+        // 精密に観察できる。○ / △ / × はフォームのラジオ入力にも現れ得るため、
+        // 「○ 等の絵文字の絶対不在」での観察は false positive を生む（記号が存在するからといって
+        // 集計表が描画されたとは限らない）。集計表自体の不在を直接観察する形に精密化する。
+        expect(body).not.toContain("<table");
       });
 
       it("参加者が 0 名のときでも新規回答用のフォームは描画される", async () => {
@@ -1408,6 +1405,317 @@ describe("routes (Hono sub-app) mounted on app", () => {
         expect(body).toContain("&lt;script&gt;");
       });
     });
+
+    /**
+     * Task 4.1 補修: 回答フォーム（GET /events/:id のフォーム描画）
+     *
+     * 背景:
+     *  - `POST /events/:id/responses` の永続化・バリデーション・フラグメント返却は実装済み
+     *  - 一方で `EventPage` 上の回答フォームが「name 入力 + 送信ボタン」だけのプレースホルダで、
+     *    候補ごとの ○ / △ / × ラジオ・customAnswer 入力・htmx 属性が欠落している
+     *  - 結果として「回答する」を押すと name しか送信されず、POST 側の zod バリデーションが
+     *    `answers[<optionId>]` 不足で失敗し、422 のフラグメント本文が画面差し替えされる
+     *
+     * 検証対象（観察可能な振る舞いに限定）:
+     *  - フォームに各候補 ID に対応する `name="answers[<optionId>]"` の入力が描画される
+     *  - カスタム設問の有無に応じて `name="customAnswer"` 入力の出現が切り替わる
+     *  - フォームが htmx 経由（`hx-post`）で送信されるよう属性付けされている
+     *  - 参加者 0 名のときでも、フォーム自体は「name 入力だけ」ではなく ○ / △ / × ラジオが
+     *    存在する（既存「フォームが描画される」だけでは弱いため、ラジオの実在を観察する）
+     *
+     * スコープ外:
+     *  - 個別の input type 属性、label の関連付け方式、ARIA 属性、クラス名等の DOM 詳細
+     *  - htmx の `hx-target` / `hx-swap` の具体値（実装詳細。E2E で観察）
+     *  - POST 側の挙動（既存 `POST /events/:id/responses` describe でカバー済み）
+     *
+     * 既存テスト書き換え提案（Phase 2 で実施。本 Phase ではテストコードを書かない）:
+     *  - `参加者が 0 名のとき候補ごとの ○ / △ / × の集計行（人数）が描画されない` (line 973-995)
+     *    は assert が `body.not.toContain("○")` 等で過度に広く、フォームに ○ / △ / × ラジオの
+     *    記号が含まれると false positive で壊れる。意図（集計行が描画されないこと）に忠実な
+     *    assert に書き換える方針:
+     *      - `<ResponsesTable/>` は 0 件のとき `<p>まだ回答がありません</p>` を返すため、
+     *        集計行が無いことは `<table` 不在で精密に表現できる
+     *      - もしくは「集計」「○:」「○ 0」のような集計行固有のマーカーの不在で代替する
+     *    Phase 2 のテストコード作成担当が、フォームに ○ / △ / × ラジオを置く方針と衝突しない
+     *    形で assert を組み直す。
+     */
+    describe("回答フォーム（GET /events/:id のフォーム描画）", () => {
+      it("カスタム設問ありのイベントで GET すると本文に各候補 ID の name='answers[<optionId>]' を持つ入力が候補数ぶん含まれる", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-form-answers",
+          title: "新年会",
+          customQuestion: "アレルギーはありますか？",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00", "2026-01-12 19:00"],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-form-answers"),
+        );
+        const body = await response.text();
+
+        // Assert
+        // 各候補 ID に対応する `name="answers[<optionId>]"` を持つ入力が描画されること
+        for (const optionId of seeded.optionIds) {
+          expect(body).toContain(`name="answers[${optionId}]"`);
+        }
+      });
+
+      it("カスタム設問ありのイベントで GET すると本文に name='customAnswer' を持つ入力が描画される", async () => {
+        // Arrange
+        await seedEvent({
+          id: "evt-form-customq",
+          title: "新年会",
+          customQuestion: "アレルギーはありますか？",
+          options: ["2026-01-10 19:00"],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-form-customq"),
+        );
+        const body = await response.text();
+
+        // Assert
+        expect(body).toContain('name="customAnswer"');
+      });
+
+      it("カスタム設問なしのイベントで GET すると本文に name='customAnswer' を持つ入力が描画されない", async () => {
+        // Arrange
+        await seedEvent({
+          id: "evt-form-nocustomq",
+          title: "新年会",
+          customQuestion: null,
+          options: ["2026-01-10 19:00"],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-form-nocustomq"),
+        );
+        const body = await response.text();
+
+        // Assert
+        expect(body).not.toContain('name="customAnswer"');
+      });
+
+      it("参加者 0 名のイベントでも回答フォーム内に各候補に対する ○ / △ / × のラジオ入力（type='radio' かつ value が ○ / △ / ×）が描画される", async () => {
+        // Arrange
+        await seedEvent({
+          id: "evt-form-radios",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-form-radios"),
+        );
+        const body = await response.text();
+
+        // Assert
+        // ○ / △ / × それぞれを value に持つ radio 入力が存在する、を観察する
+        // （type 属性とのセット、value 属性のいずれの順序でも一致できるよう、
+        //   存在する事実を value 属性側で観察する）
+        expect(body).toContain('type="radio"');
+        expect(body).toContain('value="○"');
+        expect(body).toContain('value="△"');
+        expect(body).toContain('value="×"');
+      });
+
+      it("回答フォームは htmx 経由で送信される（form 要素に hx-post 属性が付与され、通常ナビゲーションではなくフラグメント差し替えになる）", async () => {
+        // Arrange
+        await seedEvent({
+          id: "evt-form-hxpost",
+          title: "新年会",
+          options: ["2026-01-10 19:00"],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-form-hxpost"),
+        );
+        const body = await response.text();
+
+        // Assert
+        // 観察可能な振る舞いとして、form 要素に hx-post 属性が `/events/<id>/responses`
+        // を指す形で付与されている、を確認する。hx-target / hx-swap の具体値は実装詳細として
+        // 観察しない（E2E に委ねる）。
+        expect(body).toMatch(
+          /<form[^>]*hx-post=["'][^"']*\/events\/evt-form-hxpost\/responses["']/i,
+        );
+      });
+
+      it("回答フォーム（create モード）には送信成功後に入力値をリセットする htmx 属性（hx-on::after-request='this.reset()'）が付与される", async () => {
+        // Arrange
+        await seedEvent({
+          id: "evt-form-reset",
+          title: "新年会",
+          options: ["2026-01-10 19:00"],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-form-reset"),
+        );
+        const body = await response.text();
+
+        // Assert
+        // form 要素が存在し、その上で htmx の after-request フックで this.reset() が呼ばれる、
+        // という観察可能な振る舞いを確認する。クオート種別（シングル/ダブル）は実装の表現揺れ
+        // として吸収する。
+        expect(body).toMatch(/<form[^>]*>/i);
+        expect(body).toMatch(/hx-on::after-request=["']this\.reset\(\)["']/);
+      });
+    });
+
+    /**
+     * ○ 票数が最多の候補列を視覚的にハイライトする機能。
+     *
+     * 観察可能なマーカーとして、該当列の `<th>` / `<td>` に `data-top-pick="true"`
+     * 属性を付与する。視覚スタイル自体（色など）は実装の詳細として検証しない。
+     *
+     * 仕様:
+     *  - 各候補の ○ カウントを比較し、最大値を持つ候補列にマーカーを付ける
+     *  - タイブレーク: 最大値を共有する候補が複数あれば、すべての列に付与する
+     *  - 全候補が 0 票なら（誰も突出していないため）どの列にも付与しない
+     *  - 参加者が 0 名のときは集計テーブル自体が描画されないため、属性も本文に含まれない
+     */
+    describe("○ 票数最多列のハイライト", () => {
+      it("単独 1 位の候補列（ヘッダ・参加者セル・集計セル）に data-top-pick='true' 属性が付与される", async () => {
+        // Arrange: 候補 2 件、参加者 1 名、opt1=○ / opt2=× → opt1 が単独 1 位
+        const seeded = await seedEvent({
+          id: "evt-top-pick-single",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        await seedResponse({
+          eventId: seeded.id,
+          name: "山田",
+          answers: [
+            { optionId: seeded.optionIds[0]!, answer: "○" },
+            { optionId: seeded.optionIds[1]!, answer: "×" },
+          ],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-top-pick-single"),
+        );
+        const body = await response.text();
+
+        // Assert: 単独 1 位の列に対しマーカーが本文に出現する
+        expect(body).toContain('data-top-pick="true"');
+      });
+
+      it("単独 1 位でない候補列には data-top-pick 属性が付与されない", async () => {
+        // Arrange: 候補 2 件、参加者 1 名、opt1=○ / opt2=× → opt1 のみ単独 1 位
+        const seeded = await seedEvent({
+          id: "evt-top-pick-non-top",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        await seedResponse({
+          eventId: seeded.id,
+          name: "山田",
+          answers: [
+            { optionId: seeded.optionIds[0]!, answer: "○" },
+            { optionId: seeded.optionIds[1]!, answer: "×" },
+          ],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-top-pick-non-top"),
+        );
+        const body = await response.text();
+
+        // Assert: マーカーは 1 列分のみ（ヘッダ + 参加者セル + 集計セル = 3 件）
+        // 4 件以上含まれない（= 非トップ列には付与されていない）ことで観察する
+        const matches = body.match(/data-top-pick="true"/g) ?? [];
+        expect(matches.length).toBe(3);
+      });
+
+      it("○ 票数が同点の複数候補列すべてに data-top-pick='true' 属性が付与される", async () => {
+        // Arrange: 候補 2 件、参加者 2 名、両参加者とも opt1=○ / opt2=○ → 同点 2 列
+        const seeded = await seedEvent({
+          id: "evt-top-pick-tie",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        await seedResponse({
+          eventId: seeded.id,
+          name: "山田",
+          answers: [
+            { optionId: seeded.optionIds[0]!, answer: "○" },
+            { optionId: seeded.optionIds[1]!, answer: "○" },
+          ],
+        });
+        await seedResponse({
+          eventId: seeded.id,
+          name: "佐藤",
+          answers: [
+            { optionId: seeded.optionIds[0]!, answer: "○" },
+            { optionId: seeded.optionIds[1]!, answer: "○" },
+          ],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-top-pick-tie"),
+        );
+        const body = await response.text();
+
+        // Assert: 2 列分 × (1 ヘッダ + 2 参加者 + 1 集計) = 8 件
+        const matches = body.match(/data-top-pick="true"/g) ?? [];
+        expect(matches.length).toBe(8);
+      });
+
+      it("全候補が ○ 0 票のとき data-top-pick 属性は本文に一切含まれない", async () => {
+        // Arrange: 候補 2 件、参加者 1 名、両方 × → ○ 0 票
+        const seeded = await seedEvent({
+          id: "evt-top-pick-zero",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        await seedResponse({
+          eventId: seeded.id,
+          name: "山田",
+          answers: [
+            { optionId: seeded.optionIds[0]!, answer: "×" },
+            { optionId: seeded.optionIds[1]!, answer: "×" },
+          ],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-top-pick-zero"),
+        );
+        const body = await response.text();
+
+        // Assert
+        expect(body).not.toContain("data-top-pick");
+      });
+
+      it("参加者 0 名のとき（テーブル自体が描画されない）data-top-pick 属性は本文に含まれない", async () => {
+        // Arrange: 候補 2 件、参加者なし
+        await seedEvent({
+          id: "evt-top-pick-no-participants",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-top-pick-no-participants"),
+        );
+        const body = await response.text();
+
+        // Assert
+        expect(body).not.toContain("data-top-pick");
+      });
+    });
   });
 
   /**
@@ -1459,7 +1767,6 @@ describe("routes (Hono sub-app) mounted on app", () => {
     let schema: typeof import("./schema");
 
     beforeAll(async () => {
-      process.env.TURSO_DATABASE_URL = ":memory:";
       const dbMod = await import("./db");
       database = dbMod.db;
       schema = await import("./schema");
@@ -2010,6 +2317,1226 @@ describe("routes (Hono sub-app) mounted on app", () => {
         expect(responses.length).toBe(0);
         const optionResponses = await database.select().from(schema.eventOptionResponses);
         expect(optionResponses.length).toBe(0);
+      });
+    });
+  });
+
+  /**
+   * Task 4.2: 回答編集モードと更新（編集フォームへの差し替えルート）
+   *
+   * 検証対象:
+   *  - 既存参加者行の「編集」アクション押下相当の GET リクエストに対して、
+   *    対象参加者を編集可能なフォームフラグメント（`<ResponseFormRow mode="edit"/>`）を返す（要件 4.1）
+   *  - フラグメント応答は `<html>` を含まない部分 HTML である（要件 5.2）
+   *  - フォームには対象参加者の既存値（名前・候補ごとの ○/△/×・カスタム設問への回答）が
+   *    初期値として埋め込まれる（要件 4.5）
+   *  - カスタム設問が設定されていないイベントでは、編集フォームにカスタム設問入力欄が現れない（要件 3.10 同等）
+   *  - 編集対象の責任イベントとレスポンスの所属が一致しない場合は 404（要件 4.3）
+   *  - 不在 responseId / 不在 eventId のいずれでも 404（要件 4.3）
+   *
+   * スコープ外:
+   *  - 編集後の PUT 反映 → 別 describe（PUT /events/:id/responses/:responseId）で検証
+   *  - 編集ボタン UI の DOM 構造・hx-* 属性の具体（実装の詳細）→ E2E 側
+   *  - htmx の swap 挙動・`hx-target` の具体（実装の詳細）→ E2E 側
+   *
+   * 設計の前提:
+   *  - 編集フラグメント取得ルートのパスは `GET /events/:id/responses/:responseId/edit` を想定
+   *    （tasks.md 4.2 と design.md「PUT /events/:id/responses/:responseId」の対称形）
+   *  - Task 4.1 と同じ `localApp` / `:memory:` / `beforeEach` 規約を踏襲する
+   *  - 古典派ブラックボックス: DB は実体、views / routes / schema を実体結合
+   *  - DOM 検証は HTML 文字列に対する構造的アサーション（`<form>` の存在 / 送信値文字列の包含等）に留め、
+   *    クラス名や具体的な属性値などの実装の詳細には踏み込まない（リファクタリング耐性を優先）
+   *
+   * 備考:
+   *  - Bun の `it.todo` は `fn` 引数が必須のため、本ファイルでは `() => {}` を渡している。
+   *    Phase 2（RED）で本体実装に置き換える。
+   */
+  describe("GET /events/:id/responses/:responseId/edit", () => {
+    // PUT describe と同じ規約（:memory: SQLite + 動的 import + 子から順 truncate）。
+    // 兄弟 describe では変数を共有できないため、ここで再宣言する。
+    let localApp: Hono;
+    let database: typeof import("./db").db;
+    let schema: typeof import("./schema");
+
+    beforeAll(async () => {
+      const dbMod = await import("./db");
+      database = dbMod.db;
+      schema = await import("./schema");
+      const routesMod = await import("./routes");
+      const { Hono } = await import("hono");
+      const sub = new Hono();
+      sub.route("/", routesMod.default);
+      localApp = sub;
+    });
+
+    beforeEach(async () => {
+      // 子テーブルから順に削除（FK cascade に頼らず明示）
+      await database.delete(schema.eventOptionResponses);
+      await database.delete(schema.eventResponses);
+      await database.delete(schema.eventOptions);
+      await database.delete(schema.events);
+    });
+
+    // 共通ヘルパ: イベントと候補日時を作る（PUT describe と同形）
+    const seedEvent = async (input: {
+      id: string;
+      title: string;
+      customQuestion?: string | null;
+      options: string[];
+    }): Promise<{ id: string; optionIds: number[] }> => {
+      await database.insert(schema.events).values({
+        id: input.id,
+        title: input.title,
+        customQuestion: input.customQuestion ?? null,
+      });
+      const inserted = await database
+        .insert(schema.eventOptions)
+        .values(
+          input.options.map((label, index) => ({
+            eventId: input.id,
+            label,
+            sortOrder: index,
+          })),
+        )
+        .returning({ id: schema.eventOptions.id });
+      return { id: input.id, optionIds: inserted.map((r) => r.id) };
+    };
+
+    // 共通ヘルパ: 既存の参加者 1 件と各候補への回答を DB に直接投入し、responseId を返す
+    const seedResponse = async (input: {
+      eventId: string;
+      name: string;
+      customAnswer?: string | null;
+      answers: Array<{ optionId: number; answer: "○" | "△" | "×" }>;
+    }): Promise<number> => {
+      const [row] = await database
+        .insert(schema.eventResponses)
+        .values({
+          eventId: input.eventId,
+          name: input.name,
+          customAnswer: input.customAnswer ?? null,
+        })
+        .returning({ id: schema.eventResponses.id });
+      await database.insert(schema.eventOptionResponses).values(
+        input.answers.map((a) => ({
+          responseId: row.id,
+          optionId: a.optionId,
+          answer: a.answer,
+        })),
+      );
+      return row.id;
+    };
+
+    // 共通ヘルパ: GET edit リクエストを組み立てる
+    const buildGetEditRequest = (eventId: string, responseId: number | string): Request => {
+      return new Request(`http://localhost:8787/events/${eventId}/responses/${responseId}/edit`);
+    };
+
+    describe("正常系（編集フォームフラグメントの返却）", () => {
+      it("既存の responseId に対する GET は 200 を返す", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-edit-200",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-edit-200",
+          name: "山田太郎",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+
+        // Act
+        const response = await localApp.fetch(buildGetEditRequest("evt-edit-200", responseId));
+
+        // Assert
+        expect(response.status).toBe(200);
+      });
+
+      it("レスポンス本文は <html> を含まないフラグメントとして返る", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-edit-fragment",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-edit-fragment",
+          name: "山田太郎",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+
+        // Act
+        const response = await localApp.fetch(buildGetEditRequest("evt-edit-fragment", responseId));
+        const body = await response.text();
+
+        // Assert
+        // フラグメントの定義: フルページの <html>/<!doctype> を含まない
+        expect(body).not.toContain("<html");
+        expect(body.toLowerCase()).not.toContain("<!doctype");
+      });
+
+      it("レスポンス本文に対象参加者の既存の name が初期値として含まれる", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-edit-name",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-edit-name",
+          name: "山田太郎",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+
+        // Act
+        const response = await localApp.fetch(buildGetEditRequest("evt-edit-name", responseId));
+        const body = await response.text();
+
+        // Assert
+        expect(body).toContain("山田太郎");
+      });
+
+      it("レスポンス本文に対象参加者の候補ごとの ○/△/× 既存回答が初期値として含まれる", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-edit-answers",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00", "2026-01-12 19:00"],
+        });
+        const [optA, optB, optC] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-edit-answers",
+          name: "佐藤花子",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+            { optionId: optC, answer: "×" },
+          ],
+        });
+
+        // Act
+        const response = await localApp.fetch(buildGetEditRequest("evt-edit-answers", responseId));
+        const body = await response.text();
+
+        // Assert
+        // 候補ごとに既存回答が「現在の選択」として本文に現れる。
+        // 具体的な選択方式（select / radio / checked 属性）には踏み込まず、
+        // 「optionId と回答記号が同一断片内に並ぶ」ことを最小限で確認する。
+        expect(body).toContain(String(optA));
+        expect(body).toContain(String(optB));
+        expect(body).toContain(String(optC));
+        expect(body).toContain("○");
+        expect(body).toContain("△");
+        expect(body).toContain("×");
+      });
+
+      it("カスタム設問ありのイベントでは、既存のカスタム設問回答が初期値として含まれる", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-edit-custom-yes",
+          title: "新年会",
+          customQuestion: "アレルギーはありますか？",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-edit-custom-yes",
+          name: "鈴木一郎",
+          customAnswer: "甲殻類アレルギーあり",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          buildGetEditRequest("evt-edit-custom-yes", responseId),
+        );
+        const body = await response.text();
+
+        // Assert
+        expect(body).toContain("甲殻類アレルギーあり");
+      });
+
+      it("カスタム設問なしのイベントでは、編集フォームにカスタム設問入力欄が描画されない", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-edit-custom-no",
+          title: "新年会",
+          customQuestion: null,
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-edit-custom-no",
+          name: "高橋次郎",
+          customAnswer: null,
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          buildGetEditRequest("evt-edit-custom-no", responseId),
+        );
+        const body = await response.text();
+
+        // Assert
+        // カスタム設問入力欄が描画されないことを、name="customAnswer" の入力要素が
+        // 本文に含まれないことで間接的に確認する（属性順や input/textarea の選択など
+        // 実装の詳細には踏み込まない範囲で「customAnswer」という送信キー名の不在を見る）
+        expect(body).not.toContain("customAnswer");
+      });
+    });
+
+    describe("不在 / 不一致のとき 404", () => {
+      it("不在の event ID に対する GET は 404 を返す", async () => {
+        // Arrange
+        // 何も seed しない: DB は beforeEach で空
+
+        // Act
+        const response = await localApp.fetch(buildGetEditRequest("evt-edit-missing", 1));
+
+        // Assert
+        expect(response.status).toBe(404);
+      });
+
+      it("不在の responseId に対する GET は 404 を返す", async () => {
+        // Arrange
+        await seedEvent({
+          id: "evt-edit-no-resp",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+
+        // Act
+        const response = await localApp.fetch(buildGetEditRequest("evt-edit-no-resp", 999999));
+
+        // Assert
+        expect(response.status).toBe(404);
+      });
+
+      it("event ID に紐づかない別イベントの responseId への GET は 404 を返す", async () => {
+        // Arrange
+        const eventA = await seedEvent({
+          id: "evt-edit-other-A",
+          title: "Aイベント",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const eventB = await seedEvent({
+          id: "evt-edit-other-B",
+          title: "Bイベント",
+          options: ["2026-02-10 19:00", "2026-02-11 19:00"],
+        });
+        // A の responseId
+        const responseIdA = await seedResponse({
+          eventId: eventA.id,
+          name: "Aの参加者",
+          answers: [
+            { optionId: eventA.optionIds[0], answer: "○" },
+            { optionId: eventA.optionIds[1], answer: "△" },
+          ],
+        });
+
+        // Act
+        // B の URL に対して A の responseId を渡す
+        const response = await localApp.fetch(buildGetEditRequest(eventB.id, responseIdA));
+
+        // Assert
+        expect(response.status).toBe(404);
+      });
+    });
+  });
+
+  /**
+   * Task 4.2: 回答編集モードと更新（PUT 更新ハンドラ）
+   *
+   * 検証対象:
+   *  - `PUT /events/:id/responses/:responseId` が新規登録（POST /events/:id/responses）と
+   *    同じバリデーション規則（`name` 1..100、`answers[<optionId>]` ∈ {○, △, ×}、`customAnswer?` 0..500）で
+   *    入力検証を行う（要件 4.4）
+   *  - 成功時は `event_responses`（name / customAnswer）と
+   *    `event_option_responses`（候補ごとの回答）を上書きする（要件 4.2）
+   *  - 成功時は 200 + `<ResponsesTable/>` フラグメントを返し、`<html>` を含まない断片である（要件 4.2 / 5.2）
+   *  - 検証失敗時は 422 を返し、送信値が本文に含まれる（入力値保持、要件 4.4 + 3.5 相当）
+   *  - 編集対象の responseId が当該イベントに紐づかないとき 404（要件 4.3）
+   *  - 不在 event ID のとき 404
+   *  - 422 / 404 のとき DB に副作用が発生しない（旧レコードが書き換わらない）
+   *
+   * スコープ外:
+   *  - 編集フォーム自体の取得 → 上の `GET /events/:id/responses/:responseId/edit` describe で検証
+   *  - 集計表の細部レンダリング → Task 3.1 で検証済み
+   *  - htmx の `hx-put` / swap 挙動の具体 → E2E 側
+   *
+   * 設計の前提:
+   *  - Task 4.1 と同じ `localApp` / `:memory:` / `beforeEach` 規約を踏襲する
+   *  - 古典派ブラックボックス: DB は実体、views / routes / db / schema を実体結合
+   *  - PUT のリクエストは `Request(url, { method: "PUT", ... })` で構築する
+   *    （ハンドラ側が `hx-put` の `method-override` を受ける場合は Phase 2 で吸収）
+   *
+   * 備考:
+   *  - Bun の `it.todo` は `fn` 引数が必須のため、本ファイルでは `() => {}` を渡している。
+   *    Phase 2（RED）で本体実装に置き換える。
+   */
+  describe("PUT /events/:id/responses/:responseId", () => {
+    // POST /events/:id/responses と同じ規約（:memory: SQLite + 動的 import + 子から順 truncate）。
+    // 兄弟 describe では変数を共有できないため、ここで再宣言する。
+    let localApp: Hono;
+    let database: typeof import("./db").db;
+    let schema: typeof import("./schema");
+
+    beforeAll(async () => {
+      const dbMod = await import("./db");
+      database = dbMod.db;
+      schema = await import("./schema");
+      const routesMod = await import("./routes");
+      const { Hono } = await import("hono");
+      const sub = new Hono();
+      sub.route("/", routesMod.default);
+      localApp = sub;
+    });
+
+    beforeEach(async () => {
+      // 子テーブルから順に削除（FK cascade に頼らず明示）
+      await database.delete(schema.eventOptionResponses);
+      await database.delete(schema.eventResponses);
+      await database.delete(schema.eventOptions);
+      await database.delete(schema.events);
+    });
+
+    // 共通ヘルパ: イベントと候補日時を作る（POST と同形）
+    const seedEvent = async (input: {
+      id: string;
+      title: string;
+      customQuestion?: string | null;
+      options: string[];
+    }): Promise<{ id: string; optionIds: number[] }> => {
+      await database.insert(schema.events).values({
+        id: input.id,
+        title: input.title,
+        customQuestion: input.customQuestion ?? null,
+      });
+      const inserted = await database
+        .insert(schema.eventOptions)
+        .values(
+          input.options.map((label, index) => ({
+            eventId: input.id,
+            label,
+            sortOrder: index,
+          })),
+        )
+        .returning({ id: schema.eventOptions.id });
+      return { id: input.id, optionIds: inserted.map((r) => r.id) };
+    };
+
+    // 共通ヘルパ: 既存の参加者 1 件と各候補への回答を DB に直接投入し、responseId を返す
+    const seedResponse = async (input: {
+      eventId: string;
+      name: string;
+      customAnswer?: string | null;
+      answers: Array<{ optionId: number; answer: "○" | "△" | "×" }>;
+    }): Promise<number> => {
+      const [row] = await database
+        .insert(schema.eventResponses)
+        .values({
+          eventId: input.eventId,
+          name: input.name,
+          customAnswer: input.customAnswer ?? null,
+        })
+        .returning({ id: schema.eventResponses.id });
+      await database.insert(schema.eventOptionResponses).values(
+        input.answers.map((a) => ({
+          responseId: row.id,
+          optionId: a.optionId,
+          answer: a.answer,
+        })),
+      );
+      return row.id;
+    };
+
+    // 共通ヘルパ: PUT リクエストを組み立てる
+    const buildPutRequest = (
+      eventId: string,
+      responseId: number,
+      entries: Array<[string, string]>,
+    ): Request => {
+      const params = new URLSearchParams();
+      for (const [k, v] of entries) {
+        params.append(k, v);
+      }
+      return new Request(`http://localhost:8787/events/${eventId}/responses/${responseId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString(),
+      });
+    };
+
+    describe("正常系（既存回答の上書きとフラグメント応答）", () => {
+      it("有効な form での PUT は 200 を返す", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-put-200",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-200",
+          name: "山田太郎",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-200", responseId, [
+            ["name", "山田太郎"],
+            [`answers[${optA}]`, "△"],
+            [`answers[${optB}]`, "○"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(200);
+      });
+      it("成功時のレスポンス本文は <html> を含まないフラグメントとして返る", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-put-fragment-html",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-fragment-html",
+          name: "山田太郎",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-fragment-html", responseId, [
+            ["name", "山田太郎"],
+            [`answers[${optA}]`, "△"],
+            [`answers[${optB}]`, "○"],
+          ]),
+        );
+        const body = await response.text();
+
+        // Assert
+        // フラグメントの定義: フルページの <html>/<!doctype> を含まず、集計表の行（<tr>）を含む
+        expect(body).not.toContain("<html");
+        expect(body.toLowerCase()).not.toContain("<!doctype");
+        expect(body).toContain("<tr");
+      });
+
+      it("成功時のレスポンス本文は集計表フラグメント（<table> を含む）である", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-put-fragment-table",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-fragment-table",
+          name: "山田太郎",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-fragment-table", responseId, [
+            ["name", "山田太郎"],
+            [`answers[${optA}]`, "△"],
+            [`answers[${optB}]`, "○"],
+          ]),
+        );
+        const body = await response.text();
+
+        // Assert
+        expect(body).toContain("<table");
+      });
+      it("name を変更すると event_responses.name が新しい値で更新される", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-put-name",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-name",
+          name: "旧名",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+
+        // Act
+        await localApp.fetch(
+          buildPutRequest("evt-put-name", responseId, [
+            ["name", "新名"],
+            [`answers[${optA}]`, "○"],
+            [`answers[${optB}]`, "△"],
+          ]),
+        );
+
+        // Assert
+        const { eq } = await import("drizzle-orm");
+        const [row] = await database
+          .select({ name: schema.eventResponses.name })
+          .from(schema.eventResponses)
+          .where(eq(schema.eventResponses.id, responseId));
+        expect(row.name).toBe("新名");
+      });
+      it("候補ごとの回答（○/△/×）を変更すると event_option_responses が新しい値に上書きされる", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-put-answers",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-answers",
+          name: "山田太郎",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+
+        // Act
+        await localApp.fetch(
+          buildPutRequest("evt-put-answers", responseId, [
+            ["name", "山田太郎"],
+            [`answers[${optA}]`, "×"],
+            [`answers[${optB}]`, "○"],
+          ]),
+        );
+
+        // Assert
+        const { eq } = await import("drizzle-orm");
+        const rows = await database
+          .select({
+            optionId: schema.eventOptionResponses.optionId,
+            answer: schema.eventOptionResponses.answer,
+          })
+          .from(schema.eventOptionResponses)
+          .where(eq(schema.eventOptionResponses.responseId, responseId));
+        const answerByOption = new Map(rows.map((r) => [r.optionId, r.answer]));
+        expect(answerByOption.get(optA)).toBe("×");
+        expect(answerByOption.get(optB)).toBe("○");
+      });
+
+      it("event_option_responses の件数は更新後も候補数と一致する（増減しない）", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-put-answers-count",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00", "2026-01-12 19:00"],
+        });
+        const [optA, optB, optC] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-answers-count",
+          name: "山田太郎",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+            { optionId: optC, answer: "×" },
+          ],
+        });
+
+        // Act
+        await localApp.fetch(
+          buildPutRequest("evt-put-answers-count", responseId, [
+            ["name", "山田太郎"],
+            [`answers[${optA}]`, "△"],
+            [`answers[${optB}]`, "×"],
+            [`answers[${optC}]`, "○"],
+          ]),
+        );
+
+        // Assert
+        const { eq } = await import("drizzle-orm");
+        const rows = await database
+          .select({ id: schema.eventOptionResponses.id })
+          .from(schema.eventOptionResponses)
+          .where(eq(schema.eventOptionResponses.responseId, responseId));
+        expect(rows.length).toBe(3);
+      });
+
+      it("event_responses のレコード件数は更新で増減しない（同一参加者の上書きである）", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-put-responses-count",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-responses-count",
+          name: "山田太郎",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+
+        // Act
+        await localApp.fetch(
+          buildPutRequest("evt-put-responses-count", responseId, [
+            ["name", "山田太郎"],
+            [`answers[${optA}]`, "△"],
+            [`answers[${optB}]`, "○"],
+          ]),
+        );
+
+        // Assert
+        const { eq } = await import("drizzle-orm");
+        const rows = await database
+          .select({ id: schema.eventResponses.id })
+          .from(schema.eventResponses)
+          .where(eq(schema.eventResponses.eventId, "evt-put-responses-count"));
+        expect(rows.length).toBe(1);
+      });
+
+      it("カスタム設問ありのイベントで customAnswer を変更すると event_responses.custom_answer が更新される", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-put-custom",
+          title: "新年会",
+          customQuestion: "食事制限はありますか？",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-custom",
+          name: "山田太郎",
+          customAnswer: "アレルギーなし",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+
+        // Act
+        await localApp.fetch(
+          buildPutRequest("evt-put-custom", responseId, [
+            ["name", "山田太郎"],
+            ["customAnswer", "ベジタリアン"],
+            [`answers[${optA}]`, "○"],
+            [`answers[${optB}]`, "△"],
+          ]),
+        );
+
+        // Assert
+        const { eq } = await import("drizzle-orm");
+        const [row] = await database
+          .select({ customAnswer: schema.eventResponses.customAnswer })
+          .from(schema.eventResponses)
+          .where(eq(schema.eventResponses.id, responseId));
+        expect(row.customAnswer).toBe("ベジタリアン");
+      });
+
+      it("customAnswer に空文字を送ると event_responses.custom_answer は空文字として保存される", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-put-custom-empty",
+          title: "新年会",
+          customQuestion: "食事制限はありますか？",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-custom-empty",
+          name: "山田太郎",
+          customAnswer: "アレルギーなし",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+
+        // Act
+        await localApp.fetch(
+          buildPutRequest("evt-put-custom-empty", responseId, [
+            ["name", "山田太郎"],
+            ["customAnswer", ""],
+            [`answers[${optA}]`, "○"],
+            [`answers[${optB}]`, "△"],
+          ]),
+        );
+
+        // Assert
+        const { eq } = await import("drizzle-orm");
+        const [row] = await database
+          .select({ customAnswer: schema.eventResponses.customAnswer })
+          .from(schema.eventResponses)
+          .where(eq(schema.eventResponses.id, responseId));
+        expect(row.customAnswer).toBe("");
+      });
+    });
+
+    describe("バリデーション失敗時の差し戻し（422 + 入力値保持 + 副作用なし）", () => {
+      it("name が空文字の PUT は 422 を返す", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-put-422-name-empty",
+          title: "新年会",
+          options: ["2026-01-10 19:00"],
+        });
+        const [opt] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-422-name-empty",
+          name: "山田太郎",
+          answers: [{ optionId: opt, answer: "○" }],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-422-name-empty", responseId, [
+            ["name", ""],
+            [`answers[${opt}]`, "○"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(422);
+      });
+
+      it("name が 101 文字の PUT は 422 を返す", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-put-422-name-too-long",
+          title: "新年会",
+          options: ["2026-01-10 19:00"],
+        });
+        const [opt] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-422-name-too-long",
+          name: "山田太郎",
+          answers: [{ optionId: opt, answer: "○" }],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-422-name-too-long", responseId, [
+            ["name", "a".repeat(101)],
+            [`answers[${opt}]`, "○"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(422);
+      });
+
+      it("answers のいずれかが ○△× 以外の値の PUT は 422 を返す", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-put-422-answer-invalid",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [opt1, opt2] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-422-answer-invalid",
+          name: "山田太郎",
+          answers: [
+            { optionId: opt1, answer: "○" },
+            { optionId: opt2, answer: "△" },
+          ],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-422-answer-invalid", responseId, [
+            ["name", "山田太郎"],
+            [`answers[${opt1}]`, "○"],
+            [`answers[${opt2}]`, "maybe"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(422);
+      });
+
+      it("answers のキーが当該イベントの候補 ID 以外を含む PUT は 422 を返す", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-put-422-unknown-option",
+          title: "新年会",
+          options: ["2026-01-10 19:00"],
+        });
+        const [opt] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-422-unknown-option",
+          name: "山田太郎",
+          answers: [{ optionId: opt, answer: "○" }],
+        });
+
+        // Act — 当該イベントに存在しない optionId (999999) を answers に含める
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-422-unknown-option", responseId, [
+            ["name", "山田太郎"],
+            [`answers[${opt}]`, "○"],
+            [`answers[999999]`, "△"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(422);
+      });
+
+      it("customAnswer が 501 文字の PUT は 422 を返す", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-put-422-custom-answer-too-long",
+          title: "新年会",
+          customQuestion: "何か質問",
+          options: ["2026-01-10 19:00"],
+        });
+        const [opt] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-422-custom-answer-too-long",
+          name: "山田太郎",
+          customAnswer: "旧回答",
+          answers: [{ optionId: opt, answer: "○" }],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-422-custom-answer-too-long", responseId, [
+            ["name", "山田太郎"],
+            [`answers[${opt}]`, "○"],
+            ["customAnswer", "a".repeat(501)],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(422);
+      });
+
+      it("422 のレスポンス本文に送信した name の値が含まれる（入力値保持）", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-put-422-preserve-name",
+          title: "新年会",
+          customQuestion: "何か質問",
+          options: ["2026-01-10 19:00"],
+        });
+        const [opt] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-422-preserve-name",
+          name: "旧名",
+          answers: [{ optionId: opt, answer: "○" }],
+        });
+
+        // Act — customAnswer 501 文字で 422 を起こし、name に保持すべき値を入れる
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-422-preserve-name", responseId, [
+            ["name", "保持されるべき名前"],
+            [`answers[${opt}]`, "○"],
+            ["customAnswer", "a".repeat(501)],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(422);
+        const body = await response.text();
+        expect(body).toContain("保持されるべき名前");
+      });
+
+      it("422 のレスポンス本文に送信した customAnswer の値が含まれる（入力値保持）", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-put-422-preserve-custom-answer",
+          title: "新年会",
+          customQuestion: "何か質問",
+          options: ["2026-01-10 19:00"],
+        });
+        const [opt] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-422-preserve-custom-answer",
+          name: "山田太郎",
+          customAnswer: "旧回答",
+          answers: [{ optionId: opt, answer: "○" }],
+        });
+
+        // Act — name 空文字で 422 を起こし、customAnswer に保持すべきユニーク値を入れる
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-422-preserve-custom-answer", responseId, [
+            ["name", ""],
+            [`answers[${opt}]`, "○"],
+            ["customAnswer", "保持されるべき設問回答"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(422);
+        const body = await response.text();
+        expect(body).toContain("保持されるべき設問回答");
+      });
+
+      it("422 のとき event_responses の対象レコードは更新されない（旧 name のまま）", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-put-422-no-update-name",
+          title: "新年会",
+          options: ["2026-01-10 19:00"],
+        });
+        const [opt] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-422-no-update-name",
+          name: "旧名",
+          answers: [{ optionId: opt, answer: "○" }],
+        });
+
+        // Act — name 101 文字で 422 を起こす（送信 name は新しい値だが保存されてはならない）
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-422-no-update-name", responseId, [
+            ["name", "a".repeat(101)],
+            [`answers[${opt}]`, "△"],
+          ]),
+        );
+
+        // Assert — 前段アサート（404 等で意図せずパスするのを防ぐ）
+        expect(response.status).toBe(422);
+        const { eq } = await import("drizzle-orm");
+        const [row] = await database
+          .select({ name: schema.eventResponses.name })
+          .from(schema.eventResponses)
+          .where(eq(schema.eventResponses.id, responseId));
+        expect(row.name).toBe("旧名");
+      });
+
+      it("422 のとき event_option_responses の対象レコード群は更新されない（旧 answer のまま）", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-put-422-no-update-answers",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-422-no-update-answers",
+          name: "山田太郎",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+
+        // Act — name 空文字で 422 を起こす（送信 answers は新しい値だが保存されてはならない）
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-422-no-update-answers", responseId, [
+            ["name", ""],
+            [`answers[${optA}]`, "×"],
+            [`answers[${optB}]`, "○"],
+          ]),
+        );
+
+        // Assert — 前段アサート（404 等で意図せずパスするのを防ぐ）
+        expect(response.status).toBe(422);
+        const { eq } = await import("drizzle-orm");
+        const rows = await database
+          .select({
+            optionId: schema.eventOptionResponses.optionId,
+            answer: schema.eventOptionResponses.answer,
+          })
+          .from(schema.eventOptionResponses)
+          .where(eq(schema.eventOptionResponses.responseId, responseId));
+        const answerByOption = new Map(rows.map((r) => [r.optionId, r.answer]));
+        expect(answerByOption.get(optA)).toBe("○");
+        expect(answerByOption.get(optB)).toBe("△");
+      });
+    });
+
+    describe("不在 / 不一致のとき 404", () => {
+      it("不在の event ID に対する PUT は 404 を返す", async () => {
+        // Arrange — 何も seed しない（beforeEach で全テーブル truncate 済み）
+
+        // Act
+        const response = await localApp.fetch(
+          buildPutRequest("non-existent-event", 1, [
+            ["name", "山田太郎"],
+            ["answers[1]", "○"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(404);
+      });
+
+      it("不在の responseId に対する PUT は 404 を返す", async () => {
+        // Arrange — event は存在するが、responseId は seed しない
+        const seeded = await seedEvent({
+          id: "evt-put-404-missing-response",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+
+        // Act — 存在しない responseId 999999 を指定
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-404-missing-response", 999999, [
+            ["name", "山田太郎"],
+            [`answers[${optA}]`, "○"],
+            [`answers[${optB}]`, "△"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(404);
+      });
+
+      it("event ID に紐づかない別イベントの responseId への PUT は 404 を返す", async () => {
+        // Arrange — 2 つの event を seed し、event-B の responseId を event-A の URL に乗せる
+        const eventA = await seedEvent({
+          id: "evt-put-404-mismatch-a",
+          title: "イベント A",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const eventB = await seedEvent({
+          id: "evt-put-404-mismatch-b",
+          title: "イベント B",
+          options: ["2026-02-10 19:00", "2026-02-11 19:00"],
+        });
+        const [optA1, optA2] = eventA.optionIds;
+        const responseIdInB = await seedResponse({
+          eventId: "evt-put-404-mismatch-b",
+          name: "山田太郎",
+          answers: [
+            { optionId: eventB.optionIds[0], answer: "○" },
+            { optionId: eventB.optionIds[1], answer: "△" },
+          ],
+        });
+
+        // Act — event-A の URL に event-B の responseId を指定
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-404-mismatch-a", responseIdInB, [
+            ["name", "山田太郎"],
+            [`answers[${optA1}]`, "○"],
+            [`answers[${optA2}]`, "△"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(404);
+      });
+
+      it("404 のとき event_responses は更新されない（副作用なし）", async () => {
+        // Arrange — 2 つの event を seed し、event-B の responseId を event-A の URL に乗せる
+        const eventA = await seedEvent({
+          id: "evt-put-404-noupdate-resp-a",
+          title: "イベント A",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const eventB = await seedEvent({
+          id: "evt-put-404-noupdate-resp-b",
+          title: "イベント B",
+          options: ["2026-02-10 19:00", "2026-02-11 19:00"],
+        });
+        const [optA1, optA2] = eventA.optionIds;
+        const responseIdInB = await seedResponse({
+          eventId: "evt-put-404-noupdate-resp-b",
+          name: "旧名",
+          answers: [
+            { optionId: eventB.optionIds[0], answer: "○" },
+            { optionId: eventB.optionIds[1], answer: "△" },
+          ],
+        });
+
+        // Act — event-A の URL に event-B の responseId を指定し、name を変更しようとする
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-404-noupdate-resp-a", responseIdInB, [
+            ["name", "新名"],
+            [`answers[${optA1}]`, "×"],
+            [`answers[${optA2}]`, "×"],
+          ]),
+        );
+
+        // Assert — 前段アサート（200 で意図せずパスするのを防ぐ）
+        expect(response.status).toBe(404);
+        const { eq } = await import("drizzle-orm");
+        const [row] = await database
+          .select({ name: schema.eventResponses.name })
+          .from(schema.eventResponses)
+          .where(eq(schema.eventResponses.id, responseIdInB));
+        expect(row.name).toBe("旧名");
+      });
+
+      it("404 のとき event_option_responses は更新されない（副作用なし）", async () => {
+        // Arrange — 2 つの event を seed し、event-B の responseId を event-A の URL に乗せる
+        const eventA = await seedEvent({
+          id: "evt-put-404-noupdate-opt-a",
+          title: "イベント A",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const eventB = await seedEvent({
+          id: "evt-put-404-noupdate-opt-b",
+          title: "イベント B",
+          options: ["2026-02-10 19:00", "2026-02-11 19:00"],
+        });
+        const [optA1, optA2] = eventA.optionIds;
+        const [optB1, optB2] = eventB.optionIds;
+        const responseIdInB = await seedResponse({
+          eventId: "evt-put-404-noupdate-opt-b",
+          name: "山田太郎",
+          answers: [
+            { optionId: optB1, answer: "○" },
+            { optionId: optB2, answer: "△" },
+          ],
+        });
+
+        // Act — event-A の URL に event-B の responseId を指定し、answers を変更しようとする
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-404-noupdate-opt-a", responseIdInB, [
+            ["name", "山田太郎"],
+            [`answers[${optA1}]`, "×"],
+            [`answers[${optA2}]`, "×"],
+          ]),
+        );
+
+        // Assert — 前段アサート（200 で意図せずパスするのを防ぐ）
+        expect(response.status).toBe(404);
+        const { eq } = await import("drizzle-orm");
+        const rows = await database
+          .select({
+            optionId: schema.eventOptionResponses.optionId,
+            answer: schema.eventOptionResponses.answer,
+          })
+          .from(schema.eventOptionResponses)
+          .where(eq(schema.eventOptionResponses.responseId, responseIdInB));
+        const answerByOption = new Map(rows.map((r) => [r.optionId, r.answer]));
+        expect(answerByOption.get(optB1)).toBe("○");
+        expect(answerByOption.get(optB2)).toBe("△");
       });
     });
   });
