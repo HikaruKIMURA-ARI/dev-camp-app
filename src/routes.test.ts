@@ -1292,6 +1292,112 @@ describe("routes (Hono sub-app) mounted on app", () => {
         // Assert
         expect(body).toContain("アリス無回答");
       });
+
+      it("カスタム質問列のヘッダーは固定文言『カスタム回答』ではなく event.customQuestion の文字列そのものを表示する", async () => {
+        // Arrange
+        // テーブルヘッダー <th> 自体は参加者が 1 人以上いないと描画されないため、参加者を seed する。
+        const seeded = await seedEvent({
+          id: "evt-q-header-label",
+          title: "新年会",
+          customQuestion: "アレルギーはありますか？",
+          options: ["2026-01-10 19:00"],
+        });
+        await seedResponse({
+          eventId: seeded.id,
+          name: "アリス",
+          answers: [{ optionId: seeded.optionIds[0]!, answer: "○" }],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-q-header-label"),
+        );
+        const body = await response.text();
+
+        // Assert
+        expect(body).not.toContain("<th>カスタム回答</th>");
+        expect(body).toMatch(/<th[^>]*>[^<]*アレルギーはありますか？[^<]*<\/th>/);
+      });
+
+      it("カスタム質問列のヘッダー <th> には title 属性で設問文の全文が付与される（ツールチップ表示用）", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-q-header-title",
+          title: "新年会",
+          customQuestion: "アレルギーはありますか？",
+          options: ["2026-01-10 19:00"],
+        });
+        await seedResponse({
+          eventId: seeded.id,
+          name: "アリス",
+          answers: [{ optionId: seeded.optionIds[0]!, answer: "○" }],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-q-header-title"),
+        );
+        const body = await response.text();
+
+        // Assert
+        expect(body).toMatch(/<th[^>]*\btitle=["']アレルギーはありますか？["'][^>]*>/);
+      });
+
+      it("カスタム質問列のヘッダー <th> には text-overflow: ellipsis などの省略表示用 CSS が適用される", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-q-header-ellipsis",
+          title: "新年会",
+          customQuestion: "アレルギーはありますか？",
+          options: ["2026-01-10 19:00"],
+        });
+        await seedResponse({
+          eventId: seeded.id,
+          name: "アリス",
+          answers: [{ optionId: seeded.optionIds[0]!, answer: "○" }],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-q-header-ellipsis"),
+        );
+        const body = await response.text();
+
+        // Assert
+        const headerMatch = body.match(/<th[^>]*アレルギーはありますか？[^>]*>/);
+        expect(headerMatch).not.toBeNull();
+        expect(headerMatch![0]).toMatch(/text-overflow|ellipsis/);
+      });
+
+      it("カスタム設問文に HTML 特殊文字（<, >, & 等）を含んでも title 属性内で自動エスケープされ生の HTML が混入しない", async () => {
+        // Arrange
+        const XSS_MARKER = "<script>window.__xssMarker=1</script>";
+        const seeded = await seedEvent({
+          id: "evt-q-header-xss",
+          title: "新年会",
+          customQuestion: XSS_MARKER,
+          options: ["2026-01-10 19:00"],
+        });
+        await seedResponse({
+          eventId: seeded.id,
+          name: "アリス",
+          customAnswer: "卵アレルギーです",
+          answers: [{ optionId: seeded.optionIds[0]!, answer: "○" }],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-q-header-xss"),
+        );
+        const body = await response.text();
+
+        // Assert
+        expect(body).not.toContain(XSS_MARKER);
+        const thMatch = body.match(/<th[^>]*\btitle=["'][^"']*["'][^>]*>(?:(?!<\/th>).)*<\/th>/);
+        expect(thMatch).not.toBeNull();
+        expect(thMatch![0]).toContain("&lt;script&gt;");
+        expect(thMatch![0]).not.toContain("<script>");
+      });
     });
 
     describe("XSS 対策（Hono JSX の自動エスケープ）", () => {

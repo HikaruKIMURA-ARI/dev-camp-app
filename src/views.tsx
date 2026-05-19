@@ -116,7 +116,9 @@ export const ResponsesTable: FC<{
   responses: ResponseWithAnswers[];
   aggregates: Aggregates;
 }> = ({ event, options, responses, aggregates }) => {
-  const showCustomColumn = hasCustomQuestion(event);
+  // hasCustomQuestion(event) と等価だが、null チェックで TypeScript の型ナローイングを効かせる。
+  const customQuestion = event.customQuestion ?? null;
+  const showCustomColumn = customQuestion !== null;
 
   if (responses.length === 0) {
     return <p>まだ回答がありません</p>;
@@ -131,6 +133,10 @@ export const ResponsesTable: FC<{
     "background-color: var(--pico-primary-background); color: var(--pico-primary-inverse);";
   const topPickCellStyle = "background-color: var(--pico-primary-focus);";
   const topPickAggregateStyle = "background-color: var(--pico-primary-focus); font-weight: bold;";
+  // 長文のカスタム設問でテーブル幅が崩れないよう、ヘッダセルを省略表示にする。
+  // `cursor: help` で title 属性のツールチップが見られることをユーザに示唆する。
+  const customQuestionHeaderStyle =
+    "max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help;";
   const topPickHeaderAttr = (optionId: number) =>
     isTopPick(optionId) ? { "data-top-pick": "true", style: topPickHeaderStyle } : {};
   const topPickCellAttr = (optionId: number) =>
@@ -147,7 +153,11 @@ export const ResponsesTable: FC<{
             {options.map((option) => (
               <th {...topPickHeaderAttr(option.id)}>{formatOptionLabel(option.label)}</th>
             ))}
-            {showCustomColumn ? <th>カスタム回答</th> : null}
+            {customQuestion !== null ? (
+              <th title={customQuestion} style={customQuestionHeaderStyle}>
+                {customQuestion}
+              </th>
+            ) : null}
             <th scope="col">操作</th>
           </tr>
         </thead>
