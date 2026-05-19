@@ -1,0 +1,92 @@
+- main [ref=e2]:
+    - button "テーマ切り替え" [ref=e3] [cursor=pointer]
+    - article [ref=e4]:
+        - heading "ランチ会 (長文設問テスト)" [level=1] [ref=e5]
+        - list [ref=e6]:
+            - listitem [ref=e7]: 2026/06/01 (月) 12:00
+            - listitem [ref=e8]: 2026/06/02 (火) 19:00
+            - listitem [ref=e9]: 2026/06/03 (水) 18:30
+        - paragraph [ref=e10]:
+            - strong [ref=e11]: "設問:"
+            - text: ベジタリアン対応の有無や食物アレルギー（卵、乳製品、ナッツ類など）の詳細を教えてください
+        - figure [ref=e13]:
+            - table [ref=e14]:
+                - rowgroup [ref=e15]:
+                    - row "名前 2026/06/01 (月) 12:00 2026/06/02 (火) 19:00 2026/06/03 (水) 18:30 ベジタリアン対応の有無や食物アレルギー（卵、乳製品、ナッツ類など）の詳細を教えてください 操作" [ref=e16]:
+                        - columnheader "名前" [ref=e17]
+                        - columnheader "2026/06/01 (月) 12:00" [ref=e18]
+                        - columnheader "2026/06/02 (火) 19:00" [ref=e19]
+                        - columnheader "2026/06/03 (水) 18:30" [ref=e20]
+                        - columnheader "ベジタリアン対応の有無や食物アレルギー（卵、乳製品、ナッツ類など）の詳細を教えてください" [ref=e21]
+                        - columnheader "操作" [ref=e22]
+                - rowgroup [ref=e23]:
+                    - row "田中 ○ △ × 卵アレルギーあり 田中 の回答を編集" [ref=e24]:
+                        - cell "田中" [ref=e25]
+                        - cell "○" [ref=e26]
+                        - cell "△" [ref=e27]
+                        - cell "×" [ref=e28]
+                        - cell "卵アレルギーあり" [ref=e29]
+                        - cell "田中 の回答を編集" [ref=e30]:
+                            - button "田中 の回答を編集" [ref=e31] [cursor=pointer]: 編集
+                    - row "佐藤 ○ ○ △ ベジタリアン 佐藤 の回答を編集" [ref=e32]:
+                        - cell "佐藤" [ref=e33]
+                        - cell "○" [ref=e34]
+                        - cell "○" [ref=e35]
+                        - cell "△" [ref=e36]
+                        - cell "ベジタリアン" [ref=e37]
+                        - cell "佐藤 の回答を編集" [ref=e38]:
+                            - button "佐藤 の回答を編集" [ref=e39] [cursor=pointer]: 編集
+                    - row "集計 ○ 2 △ 0 × 0 ○ 1 △ 1 × 0 ○ 0 △ 1 × 1" [ref=e40]:
+                        - cell "集計" [ref=e41]
+                        - cell "○ 2 △ 0 × 0" [ref=e42]
+                        - cell "○ 1 △ 1 × 0" [ref=e43]
+                        - cell "○ 0 △ 1 × 1" [ref=e44]
+                        - cell [ref=e45]
+                        - cell [ref=e46]
+        - separator [ref=e47]
+        - heading "回答する" [level=2] [ref=e48]
+        - generic [ref=e49]:
+            - generic [ref=e50]:
+                - text: 名前
+                - textbox "名前" [ref=e51]
+            - group "2026/06/01 (月) 12:00" [ref=e52]:
+                - generic [ref=e53]: 2026/06/01 (月) 12:00
+                - generic [ref=e54]:
+                    - generic [ref=e55] [cursor=pointer]:
+                        - radio "○" [ref=e56]
+                        - text: ○
+                    - generic [ref=e57] [cursor=pointer]:
+                        - radio "△" [ref=e58]
+                        - text: △
+                    - generic [ref=e59] [cursor=pointer]:
+                        - radio "×" [ref=e60]
+                        - text: ×
+            - group "2026/06/02 (火) 19:00" [ref=e61]:
+                - generic [ref=e62]: 2026/06/02 (火) 19:00
+                - generic [ref=e63]:
+                    - generic [ref=e64] [cursor=pointer]:
+                        - radio "○" [ref=e65]
+                        - text: ○
+                    - generic [ref=e66] [cursor=pointer]:
+                        - radio "△" [ref=e67]
+                        - text: △
+                    - generic [ref=e68] [cursor=pointer]:
+                        - radio "×" [ref=e69]
+                        - text: ×
+            - group "2026/06/03 (水) 18:30" [ref=e70]:
+                - generic [ref=e71]: 2026/06/03 (水) 18:30
+                - generic [ref=e72]:
+                    - generic [ref=e73] [cursor=pointer]:
+                        - radio "○" [ref=e74]
+                        - text: ○
+                    - generic [ref=e75] [cursor=pointer]:
+                        - radio "△" [ref=e76]
+                        - text: △
+                    - generic [ref=e77] [cursor=pointer]:
+                        - radio "×" [ref=e78]
+                        - text: ×
+            - generic [ref=e79]:
+                - text: ベジタリアン対応の有無や食物アレルギー（卵、乳製品、ナッツ類など）の詳細を教えてください
+                - textbox "ベジタリアン対応の有無や食物アレルギー（卵、乳製品、ナッツ類など）の詳細を教えてください" [ref=e80]
+            - group [ref=e81]:
+                - button "回答する" [ref=e82] [cursor=pointer]

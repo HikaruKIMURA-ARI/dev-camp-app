@@ -1,0 +1,68 @@
+- main [ref=e2]:
+    - button "テーマ切り替え" [ref=e3] [cursor=pointer]
+    - article [ref=e4]:
+        - heading "ランチ会 (短文設問)" [level=1] [ref=e5]
+        - list [ref=e6]:
+            - listitem [ref=e7]: 2026/06/01 (月) 12:00
+            - listitem [ref=e8]: 2026/06/02 (火) 19:00
+        - paragraph [ref=e9]:
+            - strong [ref=e10]: "設問:"
+            - text: 備考
+        - figure [ref=e12]:
+            - table [ref=e13]:
+                - rowgroup [ref=e14]:
+                    - row "名前 2026/06/01 (月) 12:00 2026/06/02 (火) 19:00 備考 操作" [ref=e15]:
+                        - columnheader "名前" [ref=e16]
+                        - columnheader "2026/06/01 (月) 12:00" [ref=e17]
+                        - columnheader "2026/06/02 (火) 19:00" [ref=e18]
+                        - columnheader "備考" [ref=e19]
+                        - columnheader "操作" [ref=e20]
+                - rowgroup [ref=e21]:
+                    - row "田中 ○ △ なし 田中 の回答を編集" [ref=e22]:
+                        - cell "田中" [ref=e23]
+                        - cell "○" [ref=e24]
+                        - cell "△" [ref=e25]
+                        - cell "なし" [ref=e26]
+                        - cell "田中 の回答を編集" [ref=e27]:
+                            - button "田中 の回答を編集" [ref=e28] [cursor=pointer]: 編集
+                    - row "集計 ○ 1 △ 0 × 0 ○ 0 △ 1 × 0" [ref=e29]:
+                        - cell "集計" [ref=e30]
+                        - cell "○ 1 △ 0 × 0" [ref=e31]
+                        - cell "○ 0 △ 1 × 0" [ref=e32]
+                        - cell [ref=e33]
+                        - cell [ref=e34]
+        - separator [ref=e35]
+        - heading "回答する" [level=2] [ref=e36]
+        - generic [ref=e37]:
+            - generic [ref=e38]:
+                - text: 名前
+                - textbox "名前" [ref=e39]
+            - group "2026/06/01 (月) 12:00" [ref=e40]:
+                - generic [ref=e41]: 2026/06/01 (月) 12:00
+                - generic [ref=e42]:
+                    - generic [ref=e43] [cursor=pointer]:
+                        - radio "○" [ref=e44]
+                        - text: ○
+                    - generic [ref=e45] [cursor=pointer]:
+                        - radio "△" [ref=e46]
+                        - text: △
+                    - generic [ref=e47] [cursor=pointer]:
+                        - radio "×" [ref=e48]
+                        - text: ×
+            - group "2026/06/02 (火) 19:00" [ref=e49]:
+                - generic [ref=e50]: 2026/06/02 (火) 19:00
+                - generic [ref=e51]:
+                    - generic [ref=e52] [cursor=pointer]:
+                        - radio "○" [ref=e53]
+                        - text: ○
+                    - generic [ref=e54] [cursor=pointer]:
+                        - radio "△" [ref=e55]
+                        - text: △
+                    - generic [ref=e56] [cursor=pointer]:
+                        - radio "×" [ref=e57]
+                        - text: ×
+            - generic [ref=e58]:
+                - text: 備考
+                - textbox "備考" [ref=e59]
+            - group [ref=e60]:
+                - button "回答する" [ref=e61] [cursor=pointer]
