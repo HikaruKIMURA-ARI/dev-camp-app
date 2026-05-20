@@ -66,8 +66,26 @@ export const slackWebhooks = sqliteTable("slack_webhooks", {
     .default(sql`(datetime('now'))`),
 });
 
+export const participantCards = sqliteTable("participant_cards", {
+  responseId: integer("response_id")
+    .primaryKey()
+    .references(() => eventResponses.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  rarity: text("rarity").notNull(),
+  attribute: text("attribute").notNull(),
+  race: text("race").notNull(),
+  flavor: text("flavor").notNull(),
+  attack: integer("attack").notNull(),
+  defense: integer("defense").notNull(),
+  tier: text("tier", { enum: ["ai", "template", "default"] }).notNull(),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+
 export type Event = typeof events.$inferSelect;
 export type EventOption = typeof eventOptions.$inferSelect;
 export type EventResponse = typeof eventResponses.$inferSelect;
 export type EventOptionResponse = typeof eventOptionResponses.$inferSelect;
 export type SlackWebhook = typeof slackWebhooks.$inferSelect;
+export type ParticipantCard = typeof participantCards.$inferSelect;

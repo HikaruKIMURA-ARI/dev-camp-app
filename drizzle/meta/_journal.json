@@ -8,6 +8,13 @@
       "when": 1778633745575,
       "tag": "0000_light_vermin",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1779253102848,
+      "tag": "0001_wide_quasimodo",
+      "breakpoints": true
     }
   ]
 }
