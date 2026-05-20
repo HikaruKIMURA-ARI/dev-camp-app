@@ -10,6 +10,7 @@ import {
   eventOptions,
   eventResponses,
   events,
+  participantCards,
 } from "./schema";
 
 const client = createClient({
@@ -56,7 +57,7 @@ export type AggregateCounts = { circle: number; triangle: number; cross: number 
 export interface EventWithOptions {
   event: Event;
   options: EventOption[];
-  responses: Array<EventResponse & { answers: Record<string, Answer> }>;
+  responses: Array<EventResponse & { answers: Record<string, Answer>; card: PersistedCard | null }>;
   aggregates: Record<string, AggregateCounts>;
 }
 
@@ -113,9 +114,33 @@ export const getEventWithOptions = async (id: string): Promise<EventWithOptions 
     if (agg) agg[ANSWER_TO_AGG_KEY[answer]] += 1;
   }
 
+  const cardRows =
+    responseIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(participantCards)
+          .where(inArray(participantCards.responseId, responseIds));
+
+  const cardsByResponseId = new Map<number, PersistedCard>();
+  for (const c of cardRows) {
+    cardsByResponseId.set(c.responseId, {
+      responseId: c.responseId,
+      title: c.title,
+      rarity: c.rarity,
+      attribute: c.attribute,
+      race: c.race,
+      flavor: c.flavor,
+      attack: c.attack,
+      defense: c.defense,
+      tier: c.tier,
+    });
+  }
+
   const responsesWithAnswers = responses.map((response) => ({
     ...response,
     answers: answersByResponseId.get(response.id) ?? {},
+    card: cardsByResponseId.get(response.id) ?? null,
   }));
 
   return { event, options, responses: responsesWithAnswers, aggregates };
@@ -149,6 +174,73 @@ export const addResponse = async (
       );
     }
     return { responseId };
+  });
+};
+
+export type Tier = "ai" | "template" | "default";
+
+export type CardAttributes = {
+  title: string;
+  rarity: string;
+  attribute: string;
+  race: string;
+  flavor: string;
+  attack: number;
+  defense: number;
+};
+
+export type PersistedCard = CardAttributes & {
+  responseId: number;
+  tier: Tier;
+};
+
+export interface AddResponseWithCardInput {
+  response: ResponseInput;
+  card: CardAttributes & { tier: Tier };
+}
+
+export const addResponseWithCard = async (
+  eventId: string,
+  input: AddResponseWithCardInput,
+): Promise<{ responseId: number; card: PersistedCard }> => {
+  return await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(eventResponses)
+      .values({
+        eventId,
+        name: input.response.name,
+        customAnswer: input.response.customAnswer ?? null,
+      })
+      .returning({ id: eventResponses.id });
+    const responseId = row!.id;
+
+    const entries = Object.entries(input.response.answers);
+    if (entries.length > 0) {
+      await tx.insert(eventOptionResponses).values(
+        entries.map(([optionId, answer]) => ({
+          responseId,
+          optionId: Number(optionId),
+          answer,
+        })),
+      );
+    }
+
+    await tx.insert(participantCards).values({
+      responseId,
+      title: input.card.title,
+      rarity: input.card.rarity,
+      attribute: input.card.attribute,
+      race: input.card.race,
+      flavor: input.card.flavor,
+      attack: input.card.attack,
+      defense: input.card.defense,
+      tier: input.card.tier,
+    });
+
+    return {
+      responseId,
+      card: { ...input.card, responseId },
+    };
   });
 };
 
