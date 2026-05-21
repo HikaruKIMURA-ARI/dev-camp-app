@@ -26,6 +26,7 @@ export interface CreateEventInput {
   title: string;
   options: string[];
   customQuestion: string | null;
+  description?: string | null;
 }
 
 export const createEvent = async (input: CreateEventInput): Promise<{ id: string }> => {
@@ -36,6 +37,7 @@ export const createEvent = async (input: CreateEventInput): Promise<{ id: string
       id,
       title: input.title,
       customQuestion: input.customQuestion,
+      description: input.description ?? null,
     });
 
     await tx.insert(eventOptions).values(

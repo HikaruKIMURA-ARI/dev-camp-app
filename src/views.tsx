@@ -104,6 +104,7 @@ export type EventNewFormValues = {
   title?: string;
   options?: string[];
   customQuestion?: string;
+  description?: string;
 };
 
 export type EventNewFormErrors = string[];
@@ -114,6 +115,7 @@ export const EventNewForm: FC<{ values?: EventNewFormValues; errors?: EventNewFo
 }) => {
   const titleValue = values?.title ?? "";
   const customQuestionValue = values?.customQuestion ?? "";
+  const descriptionValue = values?.description ?? "";
   const [firstOption = "", ...extraOptions] = values?.options ?? [];
 
   return (
@@ -180,6 +182,13 @@ export const EventNewForm: FC<{ values?: EventNewFormValues; errors?: EventNewFo
       <label>
         カスタム設問（任意）
         <input type="text" name="customQuestion" maxlength={200} value={customQuestionValue} />
+      </label>
+
+      <label>
+        説明文（任意）
+        <textarea name="description" maxlength={2000} rows={4}>
+          {descriptionValue}
+        </textarea>
       </label>
 
       <button type="submit">作成</button>
@@ -301,9 +310,19 @@ export const EventPage: FC<{
 }> = ({ event, options, responses, aggregates }) => {
   const showCustomQuestion = hasCustomQuestion(event);
 
+  const description =
+    event.description !== null && event.description !== undefined && event.description !== ""
+      ? event.description
+      : null;
+
   return (
     <article>
       <h1>{event.title}</h1>
+      {description !== null ? (
+        <p class="event-description" style="white-space: pre-wrap;">
+          {description}
+        </p>
+      ) : null}
       <ul>
         {options.map((option) => (
           <li>{formatOptionLabel(option.label)}</li>

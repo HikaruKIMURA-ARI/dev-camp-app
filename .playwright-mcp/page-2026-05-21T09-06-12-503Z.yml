@@ -1,84 +1,84 @@
 - generic [active] [ref=e1]:
-  - banner [ref=e2]:
-    - navigation [ref=e3]:
-      - list [ref=e4]:
-        - listitem [ref=e5]:
-          - strong [ref=e6]: BI調整San
-      - list [ref=e7]:
-        - listitem [ref=e8]:
-          - button "テーマ切り替え" [ref=e9] [cursor=pointer]:
-            - img [ref=e10]
-  - main [ref=e12]:
-    - article [ref=e13]:
-      - heading "ローディング検証イベント" [level=1] [ref=e14]
-      - list [ref=e15]:
-        - listitem [ref=e16]: 2026/06/01 (月) 19:00
-      - generic [ref=e17]:
-        - article "予定の守護者 田中" [ref=e18]:
-          - generic [ref=e19]:
-            - strong [ref=e20]: 予定の守護者 田中
-            - generic [ref=e21]: R
-          - generic [ref=e22]:
-            - generic [ref=e23]: 無
-            - generic [ref=e24]: 🎫
-            - generic [ref=e25]: ★
-          - generic [ref=e26]: "[出席者 / 無]"
-          - paragraph [ref=e27]: gemini api 通信失敗時に生成される下級モンスター
-          - generic [ref=e28]:
-            - generic [ref=e29]: ATK200
-            - generic [ref=e30]: DEF1000
-        - article "予定の守護者 田中B" [ref=e31]:
-          - generic [ref=e32]:
-            - strong [ref=e33]: 予定の守護者 田中B
-            - generic [ref=e34]: R
-          - generic [ref=e35]:
-            - generic [ref=e36]: 無
-            - generic [ref=e37]: 🎫
-            - generic [ref=e38]: ★
-          - generic [ref=e39]: "[出席者 / 無]"
-          - paragraph [ref=e40]: gemini api 通信失敗時に生成される下級モンスター
-          - generic [ref=e41]:
-            - generic [ref=e42]: ATK200
-            - generic [ref=e43]: DEF1000
-      - figure [ref=e45]:
-        - table [ref=e46]:
-          - rowgroup [ref=e47]:
-            - row "名前 2026/06/01 (月) 19:00 操作" [ref=e48]:
-              - columnheader "名前" [ref=e49]
-              - columnheader "2026/06/01 (月) 19:00" [ref=e50]
-              - columnheader "操作" [ref=e51]
-          - rowgroup [ref=e52]:
-            - row "田中 ○ 田中 の回答を編集" [ref=e53]:
-              - cell "田中" [ref=e54]
-              - cell "○" [ref=e55]
-              - cell "田中 の回答を編集" [ref=e56]:
-                - button "田中 の回答を編集" [ref=e57] [cursor=pointer]: 編集
-            - row "田中B ○ 田中B の回答を編集" [ref=e58]:
-              - cell "田中B" [ref=e59]
-              - cell "○" [ref=e60]
-              - cell "田中B の回答を編集" [ref=e61]:
-                - button "田中B の回答を編集" [ref=e62] [cursor=pointer]: 編集
-            - row "集計 ○ 2 △ 0 × 0" [ref=e63]:
-              - cell "集計" [ref=e64]
-              - cell "○ 2 △ 0 × 0" [ref=e65]
-              - cell [ref=e66]
-      - separator [ref=e67]
-      - heading "回答する" [level=2] [ref=e68]
-      - generic [ref=e69]:
-        - generic [ref=e70]:
-          - text: 名前
-          - textbox "名前" [ref=e71]
-        - group "2026/06/01 (月) 19:00" [ref=e72]:
-          - generic [ref=e73]: 2026/06/01 (月) 19:00
-          - generic [ref=e74]:
-            - generic [ref=e75] [cursor=pointer]:
-              - radio "○" [ref=e76]
-              - text: ○
-            - generic [ref=e77] [cursor=pointer]:
-              - radio "△" [ref=e78]
-              - text: △
-            - generic [ref=e79] [cursor=pointer]:
-              - radio "×" [ref=e80]
-              - text: ×
-        - group [ref=e81]:
-          - button "回答する" [ref=e82] [cursor=pointer]
+    - banner [ref=e2]:
+        - navigation [ref=e3]:
+            - list [ref=e4]:
+                - listitem [ref=e5]:
+                    - strong [ref=e6]: BI調整San
+            - list [ref=e7]:
+                - listitem [ref=e8]:
+                    - button "テーマ切り替え" [ref=e9] [cursor=pointer]:
+                        - img [ref=e10]
+    - main [ref=e12]:
+        - article [ref=e13]:
+            - heading "ローディング検証イベント" [level=1] [ref=e14]
+            - list [ref=e15]:
+                - listitem [ref=e16]: 2026/06/01 (月) 19:00
+            - generic [ref=e17]:
+                - article "予定の守護者 田中" [ref=e18]:
+                    - generic [ref=e19]:
+                        - strong [ref=e20]: 予定の守護者 田中
+                        - generic [ref=e21]: R
+                    - generic [ref=e22]:
+                        - generic [ref=e23]: 無
+                        - generic [ref=e24]: 🎫
+                        - generic [ref=e25]: ★
+                    - generic [ref=e26]: "[出席者 / 無]"
+                    - paragraph [ref=e27]: gemini api 通信失敗時に生成される下級モンスター
+                    - generic [ref=e28]:
+                        - generic [ref=e29]: ATK200
+                        - generic [ref=e30]: DEF1000
+                - article "予定の守護者 田中B" [ref=e31]:
+                    - generic [ref=e32]:
+                        - strong [ref=e33]: 予定の守護者 田中B
+                        - generic [ref=e34]: R
+                    - generic [ref=e35]:
+                        - generic [ref=e36]: 無
+                        - generic [ref=e37]: 🎫
+                        - generic [ref=e38]: ★
+                    - generic [ref=e39]: "[出席者 / 無]"
+                    - paragraph [ref=e40]: gemini api 通信失敗時に生成される下級モンスター
+                    - generic [ref=e41]:
+                        - generic [ref=e42]: ATK200
+                        - generic [ref=e43]: DEF1000
+            - figure [ref=e45]:
+                - table [ref=e46]:
+                    - rowgroup [ref=e47]:
+                        - row "名前 2026/06/01 (月) 19:00 操作" [ref=e48]:
+                            - columnheader "名前" [ref=e49]
+                            - columnheader "2026/06/01 (月) 19:00" [ref=e50]
+                            - columnheader "操作" [ref=e51]
+                    - rowgroup [ref=e52]:
+                        - row "田中 ○ 田中 の回答を編集" [ref=e53]:
+                            - cell "田中" [ref=e54]
+                            - cell "○" [ref=e55]
+                            - cell "田中 の回答を編集" [ref=e56]:
+                                - button "田中 の回答を編集" [ref=e57] [cursor=pointer]: 編集
+                        - row "田中B ○ 田中B の回答を編集" [ref=e58]:
+                            - cell "田中B" [ref=e59]
+                            - cell "○" [ref=e60]
+                            - cell "田中B の回答を編集" [ref=e61]:
+                                - button "田中B の回答を編集" [ref=e62] [cursor=pointer]: 編集
+                        - row "集計 ○ 2 △ 0 × 0" [ref=e63]:
+                            - cell "集計" [ref=e64]
+                            - cell "○ 2 △ 0 × 0" [ref=e65]
+                            - cell [ref=e66]
+            - separator [ref=e67]
+            - heading "回答する" [level=2] [ref=e68]
+            - generic [ref=e69]:
+                - generic [ref=e70]:
+                    - text: 名前
+                    - textbox "名前" [ref=e71]
+                - group "2026/06/01 (月) 19:00" [ref=e72]:
+                    - generic [ref=e73]: 2026/06/01 (月) 19:00
+                    - generic [ref=e74]:
+                        - generic [ref=e75] [cursor=pointer]:
+                            - radio "○" [ref=e76]
+                            - text: ○
+                        - generic [ref=e77] [cursor=pointer]:
+                            - radio "△" [ref=e78]
+                            - text: △
+                        - generic [ref=e79] [cursor=pointer]:
+                            - radio "×" [ref=e80]
+                            - text: ×
+                - group [ref=e81]:
+                    - button "回答する" [ref=e82] [cursor=pointer]

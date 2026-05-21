@@ -181,6 +181,39 @@ describe("routes (Hono sub-app) mounted on app", () => {
       // type="submit" を明示する要素（<button> / <input>）のいずれかを許容する。
       expect(body).toMatch(/<(?:button|input)[^>]*\btype=["']submit["']/i);
     });
+
+    /**
+     * イベント作成者コメント（description）— フォーム入力欄
+     *
+     * 観点:
+     *  - 任意項目の textarea（複数行入力）として name="description" が描画される
+     *  - required ではない（任意項目）
+     *  - 改行を保持する目的で textarea（input ではない）であること
+     */
+    it('フォームに name="description" の textarea が含まれる（複数行入力可能）', async () => {
+      // Arrange
+      const request = new Request("http://localhost:8787/events/new");
+
+      // Act
+      const response = await app.fetch(request);
+      const body = await response.text();
+
+      // Assert
+      expect(body).toMatch(/<textarea[^>]*\bname=["']description["'][^>]*>/i);
+    });
+    it('name="description" の textarea には required 属性が付いていない（任意項目）', async () => {
+      // Arrange
+      const request = new Request("http://localhost:8787/events/new");
+
+      // Act
+      const response = await app.fetch(request);
+      const body = await response.text();
+
+      // Assert
+      const match = body.match(/<textarea[^>]*\bname=["']description["'][^>]*>/i);
+      expect(match).not.toBeNull();
+      expect(match![0]).not.toMatch(/\brequired\b/i);
+    });
   });
 
   /**
@@ -429,6 +462,90 @@ describe("routes (Hono sub-app) mounted on app", () => {
         const rows = await database.select().from(schema.events);
         expect(rows[0]?.customQuestion).toBeNull();
       });
+
+      /**
+       * イベント作成者コメント（description）— 永続化
+       *
+       * 観点:
+       *  - 通常文字列を送ると events.description にそのまま保存される
+       *  - 改行を含む文字列を送っても改行が壊れずそのまま保存される
+       *  - 空文字を送ると events.description は null として保存される（customQuestion と同じ正規化）
+       *  - description フィールド自体を送らなかった場合も events.description は null として保存される
+       *  - 2000 文字（境界値）を送ると 302 を返し、events.description に 2000 文字保存される
+       */
+      it("description を送ると events.description に送信値がそのまま保存される", async () => {
+        // Act
+        await localApp.fetch(
+          buildFormRequest([
+            ["title", "新年会"],
+            ["options", "2026-01-10 19:00"],
+            ["description", "新メンバー歓迎会"],
+          ]),
+        );
+
+        // Assert
+        const rows = await database.select().from(schema.events);
+        expect(rows[0]?.description).toBe("新メンバー歓迎会");
+      });
+      it("改行を含む description を送ると events.description に改行を保持したまま保存される", async () => {
+        // Act
+        await localApp.fetch(
+          buildFormRequest([
+            ["title", "新年会"],
+            ["options", "2026-01-10 19:00"],
+            ["description", "1 行目\n2 行目\n3 行目"],
+          ]),
+        );
+
+        // Assert
+        const rows = await database.select().from(schema.events);
+        expect(rows[0]?.description).toBe("1 行目\n2 行目\n3 行目");
+      });
+      it("description を空文字で送ると events.description は null として保存される", async () => {
+        // Act
+        await localApp.fetch(
+          buildFormRequest([
+            ["title", "新年会"],
+            ["options", "2026-01-10 19:00"],
+            ["description", ""],
+          ]),
+        );
+
+        // Assert
+        const rows = await database.select().from(schema.events);
+        expect(rows[0]?.description).toBeNull();
+      });
+      it("description フィールド自体を送らなかった場合も events.description は null として保存される", async () => {
+        // Act
+        await localApp.fetch(
+          buildFormRequest([
+            ["title", "新年会"],
+            ["options", "2026-01-10 19:00"],
+          ]),
+        );
+
+        // Assert
+        const rows = await database.select().from(schema.events);
+        expect(rows[0]?.description).toBeNull();
+      });
+      it("description が 2000 文字（上限ぎりぎり）のフォームを送ると 302 を返し description が保存される", async () => {
+        // Arrange
+        const longDescription = "あ".repeat(2000);
+
+        // Act
+        const response = await localApp.fetch(
+          buildFormRequest([
+            ["title", "新年会"],
+            ["options", "2026-01-10 19:00"],
+            ["description", longDescription],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(302);
+        const rows = await database.select().from(schema.events);
+        expect(rows[0]?.description).toBe(longDescription);
+      });
     });
 
     describe("バリデーション失敗時の差し戻し（422 + フルページ + 入力値保持）", () => {
@@ -534,6 +651,43 @@ describe("routes (Hono sub-app) mounted on app", () => {
         expect(response.status).toBe(422);
       });
 
+      /**
+       * イベント作成者コメント（description）— 上限超過
+       *
+       * 観点:
+       *  - 上限 2000 文字を超える description（2001 文字）を送ると 422 を返す
+       *  - 422 時、events / event_options に副作用が無い
+       *  - 422 時のレスポンス本文に送信した description の値が含まれる（入力値保持）
+       *  - 改行を含む description を送って 422 になっても、改行を含む値が本文に保持される
+       */
+      it("description が 2001 文字（上限超過）のフォームを送ると 422 を返す", async () => {
+        // Act
+        const response = await localApp.fetch(
+          buildFormRequest([
+            ["title", "新年会"],
+            ["options", "2026-01-10 19:00"],
+            ["description", "あ".repeat(2001)],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(422);
+      });
+      it("description 2001 文字で 422 を返したとき events テーブルにレコードは作成されない（副作用なし）", async () => {
+        // Act
+        await localApp.fetch(
+          buildFormRequest([
+            ["title", "新年会"],
+            ["options", "2026-01-10 19:00"],
+            ["description", "あ".repeat(2001)],
+          ]),
+        );
+
+        // Assert
+        const rows = await database.select().from(schema.events);
+        expect(rows.length).toBe(0);
+      });
+
       it("422 時のレスポンスは Location ヘッダを持たない（リダイレクトしない）", async () => {
         // Act
         const response = await localApp.fetch(
@@ -637,6 +791,41 @@ describe("routes (Hono sub-app) mounted on app", () => {
 
         // Assert
         expect(body).toContain("保持される設問");
+      });
+
+      it("422 時のレスポンス本文には送信した description の値が含まれる（入力値保持）", async () => {
+        // Arrange
+        const sentinel = "保持される説明文XYZ";
+
+        // Act
+        const response = await localApp.fetch(
+          buildFormRequest([
+            ["title", ""],
+            ["options", "2026-01-10 19:00"],
+            ["description", sentinel],
+          ]),
+        );
+        const body = await response.text();
+
+        // Assert
+        expect(body).toContain(sentinel);
+      });
+      it("422 時のレスポンス本文には送信した description の改行を含む値が保持されたまま含まれる", async () => {
+        // Arrange — 改行は HTML 描画段階で textarea のテキストコンテンツとして保持される
+        const sentinel = "保持A\n保持B";
+
+        // Act
+        const response = await localApp.fetch(
+          buildFormRequest([
+            ["title", ""],
+            ["options", "2026-01-10 19:00"],
+            ["description", sentinel],
+          ]),
+        );
+        const body = await response.text();
+
+        // Assert
+        expect(body).toContain(sentinel);
       });
 
       it("422 を返したとき events テーブルにレコードは作成されない（副作用なし）", async () => {
@@ -903,6 +1092,162 @@ describe("routes (Hono sub-app) mounted on app", () => {
 
         // Assert
         expect(body).toContain("ユニークな飲み会タイトル2026");
+      });
+
+      /**
+       * イベント作成者コメント（description）— 詳細ページ描画
+       *
+       * 観点:
+       *  - description が設定されているイベントでは、本文にその値が含まれる
+       *  - description は <h1>（タイトル）の直後（後方）に描画される（タイトルの上ではない）
+       *  - 改行を含む description は、改行が見える形（<br> または white-space:pre-wrap な要素）で描画される
+       *  - description が null のイベントでは、description を表すコンテナ要素自体が描画されない（空でも要素が出ない）
+       *  - description が空文字（後方互換のため legacy データとして存在しうる）でも、要素が描画されない
+       *  - description のテキストは Hono JSX の自動エスケープで XSS が防止される
+       */
+      it("description を持つイベントのレスポンス本文に description の値が含まれる", async () => {
+        // Arrange
+        await database.insert(schema.events).values({
+          id: "evt-desc-value",
+          title: "新年会",
+          customQuestion: null,
+          description: "新メンバー歓迎の打ち合わせXYZ",
+        });
+        await database.insert(schema.eventOptions).values({
+          eventId: "evt-desc-value",
+          label: "2026-01-10 19:00",
+          sortOrder: 0,
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-desc-value"),
+        );
+        const body = await response.text();
+
+        // Assert
+        expect(body).toContain("新メンバー歓迎の打ち合わせXYZ");
+      });
+      it("description は <h1> タイトル要素の直後に描画される（タイトルより後ろの位置にある）", async () => {
+        // Arrange
+        await database.insert(schema.events).values({
+          id: "evt-desc-position",
+          title: "ユニーク説明タイトル",
+          customQuestion: null,
+          description: "ユニーク説明本文",
+        });
+        await database.insert(schema.eventOptions).values({
+          eventId: "evt-desc-position",
+          label: "2026-01-10 19:00",
+          sortOrder: 0,
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-desc-position"),
+        );
+        const body = await response.text();
+
+        // Assert
+        const titleIdx = body.indexOf("ユニーク説明タイトル");
+        const descIdx = body.indexOf("ユニーク説明本文");
+        expect(titleIdx).toBeGreaterThan(-1);
+        expect(descIdx).toBeGreaterThan(titleIdx);
+      });
+      it("改行を含む description は改行が保持された形（<br> もしくは white-space:pre-wrap）で描画される", async () => {
+        // Arrange
+        await database.insert(schema.events).values({
+          id: "evt-desc-newline",
+          title: "新年会",
+          customQuestion: null,
+          description: "1 行目\n2 行目",
+        });
+        await database.insert(schema.eventOptions).values({
+          eventId: "evt-desc-newline",
+          label: "2026-01-10 19:00",
+          sortOrder: 0,
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-desc-newline"),
+        );
+        const body = await response.text();
+
+        // Assert — pre-wrap か <br> いずれかで改行が見える形になっていること
+        const preservesNewlines =
+          /white-space\s*:\s*pre-wrap/.test(body) || /<br\s*\/?>/.test(body);
+        expect(preservesNewlines).toBe(true);
+      });
+      it("description が null のイベントでは description を表す要素自体が描画されない", async () => {
+        // Arrange
+        await database.insert(schema.events).values({
+          id: "evt-desc-null",
+          title: "新年会",
+          customQuestion: null,
+          description: null,
+        });
+        await database.insert(schema.eventOptions).values({
+          eventId: "evt-desc-null",
+          label: "2026-01-10 19:00",
+          sortOrder: 0,
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-desc-null"),
+        );
+        const body = await response.text();
+
+        // Assert
+        expect(body).not.toContain("event-description");
+      });
+      it("description が空文字のイベントでは description を表す要素自体が描画されない", async () => {
+        // Arrange
+        await database.insert(schema.events).values({
+          id: "evt-desc-empty",
+          title: "新年会",
+          customQuestion: null,
+          description: "",
+        });
+        await database.insert(schema.eventOptions).values({
+          eventId: "evt-desc-empty",
+          label: "2026-01-10 19:00",
+          sortOrder: 0,
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-desc-empty"),
+        );
+        const body = await response.text();
+
+        // Assert
+        expect(body).not.toContain("event-description");
+      });
+      it("description に HTML 特殊文字が含まれていても自動エスケープされてそのまま実行されない（XSS 防止）", async () => {
+        // Arrange
+        await database.insert(schema.events).values({
+          id: "evt-desc-xss",
+          title: "新年会",
+          customQuestion: null,
+          description: "<script>alert('xss')</script>",
+        });
+        await database.insert(schema.eventOptions).values({
+          eventId: "evt-desc-xss",
+          label: "2026-01-10 19:00",
+          sortOrder: 0,
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-desc-xss"),
+        );
+        const body = await response.text();
+
+        // Assert — 生 <script> としては入らず、エスケープされた &lt;script&gt; として現れる
+        expect(body).not.toContain("<script>alert('xss')</script>");
+        expect(body).toContain("&lt;script&gt;");
       });
 
       it("レスポンス本文に各候補日時のラベルがすべて含まれる", async () => {

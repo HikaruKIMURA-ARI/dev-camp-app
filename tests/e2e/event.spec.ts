@@ -63,7 +63,17 @@ test.describe("回答送信フロー（ハッピーパス・htmx）", () => {
     const editNameInput = page.locator("#responses").getByLabel("名前");
     await expect(editNameInput).toHaveValue("田中");
     await editNameInput.fill("佐藤");
+
+    // PUT /events/:id/responses/:responseId の完了を明示的に待つ。
+    // 直前テスト (POST) の Gemini カード生成が遅延した直後など、
+    // htmx swap のタイミングと Playwright の暗黙待機 (5s) が拮抗する瞬間があり、
+    // click 直後の locator 評価だけでは flaky になるため。
+    const putResponse = page.waitForResponse(
+      (res) =>
+        /\/events\/[^/]+\/responses\/\d+$/.test(res.url()) && res.request().method() === "PUT",
+    );
     await page.getByRole("button", { name: "更新する" }).click();
+    await putResponse;
 
     await expect(page.getByRole("cell", { name: "佐藤", exact: true })).toBeVisible();
     await expect(page.getByRole("cell", { name: "田中", exact: true })).toBeHidden();

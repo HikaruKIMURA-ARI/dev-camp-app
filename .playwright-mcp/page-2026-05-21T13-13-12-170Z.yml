@@ -1,0 +1,37 @@
+- generic [active] [ref=e1]:
+    - banner [ref=e2]:
+        - navigation [ref=e3]:
+            - list [ref=e4]:
+                - listitem [ref=e5]:
+                    - strong [ref=e6]: BI調整San
+            - list [ref=e7]:
+                - listitem [ref=e8]:
+                    - button "テーマ切り替え" [ref=e9] [cursor=pointer]:
+                        - img [ref=e10]
+    - main [ref=e12]:
+        - article [ref=e13]:
+            - heading "説明文テスト会" [level=1] [ref=e14]
+            - paragraph [ref=e15]: "クリスマス会の打ち合わせです。 会場: 本社 5F 持ち物: プレゼント (1500円以内)"
+            - list [ref=e16]:
+                - listitem [ref=e17]: 2026/12/25 (金) 19:00
+            - paragraph [ref=e20]: まだ回答がありません
+            - separator [ref=e21]
+            - heading "回答する" [level=2] [ref=e22]
+            - generic [ref=e23]:
+                - generic [ref=e24]:
+                    - text: 名前
+                    - textbox "名前" [ref=e25]
+                - group "2026/12/25 (金) 19:00" [ref=e26]:
+                    - generic [ref=e27]: 2026/12/25 (金) 19:00
+                    - generic [ref=e28]:
+                        - generic [ref=e29] [cursor=pointer]:
+                            - radio "○" [ref=e30]
+                            - text: ○
+                        - generic [ref=e31] [cursor=pointer]:
+                            - radio "△" [ref=e32]
+                            - text: △
+                        - generic [ref=e33] [cursor=pointer]:
+                            - radio "×" [ref=e34]
+                            - text: ×
+                - group [ref=e35]:
+                    - button "回答する" [ref=e36] [cursor=pointer]

@@ -361,3 +361,154 @@ describe("src/db.ts — 参加者カード拡張（Task 2.2）", () => {
     });
   });
 });
+
+/**
+ * イベント作成者コメント（description）— Repository レイヤ
+ *
+ * 対象（src/db.ts への追加 / 拡張）:
+ *  - 既存 `createEvent({ title, options, customQuestion })` に
+ *    `description: string | null` を任意フィールドとして増やす（nullable text カラム）
+ *  - 既存 `getEventWithOptions(eventId)` の戻り値 `event` に `description: string | null` を含める
+ *
+ * 設計の前提:
+ *  - DB は実体（古典派）。`beforeEach` で events / event_options を子→親順に truncate
+ *  - description 未指定 / null / 空文字の正規化方針は customQuestion と同じく「`null` で保存」
+ *    （ルーター層が空文字 → null に正規化する場合でも、Repository は受け取った値で書き込み、
+ *     読み出し時に同じ値を返すことだけを担保する）
+ */
+describe("src/db.ts — イベント説明文（description）", () => {
+  beforeEach(async () => {
+    await db.delete(participantCards);
+    await db.delete(eventOptionResponses);
+    await db.delete(eventResponses);
+    await db.delete(eventOptions);
+    await db.delete(events);
+  });
+
+  /**
+   * 観点:
+   *  - 通常文字列を渡すと events.description にそのまま保存される
+   *  - 改行を含む文字列を渡すと改行を保持したまま保存される
+   *  - description を未指定（undefined）で渡すと events.description は null として保存される
+   *  - description に null を明示的に渡すと events.description は null として保存される
+   *  - 2000 文字（上限ぎりぎり）でも例外を投げずに保存できる
+   *  - `getEventWithOptions` の戻り値 `event.description` に保存値がそのまま含まれる
+   *  - description が null のイベントを読み出すと `event.description === null` が返る
+   *  - 既存の customQuestion / options 周りの動作は description カラム追加で壊れない（後方互換）
+   */
+  it("createEvent に通常文字列の description を渡すと events.description に同じ値が保存される", async () => {
+    // Act
+    const { id } = await createEvent({
+      title: "歓送迎会の打ち合わせ",
+      options: ["18:00"],
+      customQuestion: null,
+      description: "新メンバー歓迎のため、軽食を用意します。会場は本社 5F です。",
+    });
+
+    // Assert
+    const [row] = await db.select().from(events).where(eq(events.id, id));
+    expect(row?.description).toBe("新メンバー歓迎のため、軽食を用意します。会場は本社 5F です。");
+  });
+  it("createEvent に改行入りの description を渡すと改行を保持したまま events.description に保存される", async () => {
+    // Act
+    const { id } = await createEvent({
+      title: "新年会",
+      options: ["18:00"],
+      customQuestion: null,
+      description: "1 行目\n2 行目\n3 行目",
+    });
+
+    // Assert
+    const [row] = await db.select().from(events).where(eq(events.id, id));
+    expect(row?.description).toBe("1 行目\n2 行目\n3 行目");
+  });
+  it("createEvent で description を未指定（undefined）にすると events.description は null として保存される", async () => {
+    // Act
+    const { id } = await createEvent({
+      title: "歓送迎会",
+      options: ["18:00"],
+      customQuestion: null,
+    });
+
+    // Assert
+    const [row] = await db.select().from(events).where(eq(events.id, id));
+    expect(row?.description).toBe(null);
+  });
+  it("createEvent で description に null を渡すと events.description は null として保存される", async () => {
+    // Act
+    const { id } = await createEvent({
+      title: "歓送迎会",
+      options: ["18:00"],
+      customQuestion: null,
+      description: null,
+    });
+
+    // Assert
+    const [row] = await db.select().from(events).where(eq(events.id, id));
+    expect(row?.description).toBe(null);
+  });
+  it("createEvent に 2000 文字の description を渡しても例外を投げず保存され、読み出しでも 2000 文字を維持する", async () => {
+    // Arrange
+    const longDescription = "あ".repeat(2000);
+
+    // Act
+    const { id } = await createEvent({
+      title: "歓送迎会",
+      options: ["18:00"],
+      customQuestion: null,
+      description: longDescription,
+    });
+
+    // Assert
+    const [row] = await db.select().from(events).where(eq(events.id, id));
+    expect(row?.description?.length).toBe(2000);
+    expect(row?.description).toBe(longDescription);
+  });
+  it("getEventWithOptions の戻り値 event.description に createEvent で渡した description が含まれる", async () => {
+    // Arrange
+    const { id } = await createEvent({
+      title: "歓送迎会",
+      options: ["18:00"],
+      customQuestion: null,
+      description: "趣旨: 新メンバー歓迎",
+    });
+
+    // Act
+    const data = await getEventWithOptions(id);
+
+    // Assert
+    expect(data?.event.description).toBe("趣旨: 新メンバー歓迎");
+  });
+  it("description が null で作成されたイベントを getEventWithOptions で読み出すと event.description が null になる", async () => {
+    // Arrange
+    const { id } = await createEvent({
+      title: "歓送迎会",
+      options: ["18:00"],
+      customQuestion: null,
+      description: null,
+    });
+
+    // Act
+    const data = await getEventWithOptions(id);
+
+    // Assert
+    expect(data?.event.description).toBe(null);
+  });
+  it("description カラム追加後も既存 customQuestion / options 周りの永続化と読み出しは壊れない（後方互換）", async () => {
+    // Arrange
+    const { id } = await createEvent({
+      title: "イベント A",
+      options: ["18:00", "19:00"],
+      customQuestion: "持参するもの",
+      description: null,
+    });
+
+    // Act
+    const data = await getEventWithOptions(id);
+
+    // Assert
+    expect(data?.event.title).toBe("イベント A");
+    expect(data?.event.customQuestion).toBe("持参するもの");
+    expect(data?.options.map((o) => o.label)).toEqual(["18:00", "19:00"]);
+  });
+});

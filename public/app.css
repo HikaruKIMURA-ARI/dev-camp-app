@@ -81,14 +81,15 @@
 
 #cards .yc-title {
   flex: 1 1 auto;
+  min-width: 0;
   font-size: 0.72rem;
   font-weight: 800;
   line-height: 1.2;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  max-height: 2.4em;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   word-break: break-word;
+  scrollbar-width: thin;
 }
 
 #cards .yc-rarity-badge {
@@ -193,10 +194,10 @@
   font-style: italic;
   color: var(--pico-color);
   line-height: 1.3;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  max-height: 3.9em;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 #cards .yc-stats {

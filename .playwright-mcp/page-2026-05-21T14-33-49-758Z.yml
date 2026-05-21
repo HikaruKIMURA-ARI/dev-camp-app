@@ -1,0 +1,28 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - navigation [ref=e3]:
+      - list [ref=e4]:
+        - listitem [ref=e5]:
+          - strong [ref=e6]: BI調整San
+      - list [ref=e7]:
+        - listitem [ref=e8]:
+          - button "テーマ切り替え" [ref=e9] [cursor=pointer]:
+            - img [ref=e10]
+  - main [ref=e12]:
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - text: イベント名
+        - textbox "イベント名" [ref=e15]
+      - group "候補日時" [ref=e16]:
+        - generic [ref=e17]: 候補日時
+        - generic [ref=e18]:
+          - text: 候補 1
+          - textbox "候補 1" [ref=e19]
+        - button "候補を追加" [ref=e20] [cursor=pointer]
+      - generic [ref=e21]:
+        - text: カスタム設問（任意）
+        - textbox "カスタム設問（任意）" [ref=e22]
+      - generic [ref=e23]:
+        - text: 説明文（任意）
+        - textbox "説明文（任意）" [ref=e24]
+      - button "作成" [ref=e25] [cursor=pointer]

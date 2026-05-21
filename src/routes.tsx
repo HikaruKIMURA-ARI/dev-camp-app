@@ -45,6 +45,7 @@ const eventCreateSchema = z.object({
     .min(1)
     .refine((arr) => new Set(arr).size === arr.length, "候補日時に重複があります"),
   customQuestion: z.string().max(200).optional(),
+  description: z.string().max(2000).optional(),
 });
 
 const normalizeOptions = (raw: unknown): string[] => {
@@ -60,11 +61,13 @@ routes.post("/events", async (c) => {
   const rawOptions = normalizeOptions(body.options);
   const rawCustomQuestion =
     typeof body.customQuestion === "string" ? body.customQuestion : undefined;
+  const rawDescription = typeof body.description === "string" ? body.description : undefined;
 
   const parsed = eventCreateSchema.safeParse({
     title: rawTitle,
     options: rawOptions,
     customQuestion: rawCustomQuestion,
+    description: rawDescription,
   });
 
   if (!parsed.success) {
@@ -72,6 +75,7 @@ routes.post("/events", async (c) => {
       title: rawTitle,
       options: rawOptions,
       customQuestion: rawCustomQuestion,
+      description: rawDescription,
     };
     const errors = parsed.error.issues.map((issue) => issue.message);
     return c.html(
@@ -86,11 +90,16 @@ routes.post("/events", async (c) => {
     parsed.data.customQuestion === undefined || parsed.data.customQuestion.trim() === ""
       ? null
       : parsed.data.customQuestion;
+  const description =
+    parsed.data.description === undefined || parsed.data.description === ""
+      ? null
+      : parsed.data.description;
 
   const { id } = await createEvent({
     title: parsed.data.title,
     options: parsed.data.options,
     customQuestion,
+    description,
   });
 
   return c.redirect(`/events/${id}`, 302);
