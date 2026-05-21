@@ -349,6 +349,11 @@ export const ResponseFormRow: FC<{
   // 編集モード時のテーブル列数: 名前 + 候補数 + (カスタム回答?) + 操作
   const editColspan = 1 + options.length + (showCustomQuestion ? 1 : 0) + 1;
 
+  const hxOnBefore = "this.querySelector('button[type=submit]').setAttribute('aria-busy', 'true')";
+  const hxOnAfter = isEdit
+    ? "this.querySelector('button[type=submit]').setAttribute('aria-busy', 'false')"
+    : "this.querySelector('button[type=submit]').setAttribute('aria-busy', 'false'); this.reset()";
+
   const formNode = (
     <form
       method={isEdit ? undefined : "post"}
@@ -357,7 +362,11 @@ export const ResponseFormRow: FC<{
       hx-put={isEdit ? `/events/${event.id}/responses/${responseId}` : undefined}
       hx-target="#responses"
       hx-swap="outerHTML"
-      {...(isEdit ? {} : { "hx-on::after-request": "this.reset()" })}
+      hx-disabled-elt="find button[type=submit]"
+      {...{
+        "hx-on::before-request": hxOnBefore,
+        "hx-on::after-request": hxOnAfter,
+      }}
     >
       {errors && errors.length > 0 ? (
         <ul role="alert">

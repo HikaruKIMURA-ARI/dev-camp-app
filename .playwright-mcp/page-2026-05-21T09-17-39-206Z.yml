@@ -1,0 +1,138 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - navigation [ref=e3]:
+      - list [ref=e4]:
+        - listitem [ref=e5]:
+          - strong [ref=e6]: BI調整San
+      - list [ref=e7]:
+        - listitem [ref=e8]:
+          - button "テーマ切り替え" [ref=e9] [cursor=pointer]:
+            - img [ref=e10]
+  - main [ref=e12]:
+    - article [ref=e13]:
+      - heading "ローディング検証イベント" [level=1] [ref=e14]
+      - list [ref=e15]:
+        - listitem [ref=e16]: 2026/06/01 (月) 19:00
+      - generic [ref=e17]:
+        - article "予定の守護者 田中" [ref=e18]:
+          - generic [ref=e19]:
+            - strong [ref=e20]: 予定の守護者 田中
+            - generic [ref=e21]: R
+          - generic [ref=e22]:
+            - generic [ref=e23]: 無
+            - generic [ref=e24]: 🎫
+            - generic [ref=e25]: ★
+          - generic [ref=e26]: "[出席者 / 無]"
+          - paragraph [ref=e27]: gemini api 通信失敗時に生成される下級モンスター
+          - generic [ref=e28]:
+            - generic [ref=e29]: ATK200
+            - generic [ref=e30]: DEF1000
+        - article "予定の守護者 田中B" [ref=e31]:
+          - generic [ref=e32]:
+            - strong [ref=e33]: 予定の守護者 田中B
+            - generic [ref=e34]: R
+          - generic [ref=e35]:
+            - generic [ref=e36]: 無
+            - generic [ref=e37]: 🎫
+            - generic [ref=e38]: ★
+          - generic [ref=e39]: "[出席者 / 無]"
+          - paragraph [ref=e40]: gemini api 通信失敗時に生成される下級モンスター
+          - generic [ref=e41]:
+            - generic [ref=e42]: ATK200
+            - generic [ref=e43]: DEF1000
+        - article "幹事キラー 佐藤" [ref=e44]:
+          - generic [ref=e45]:
+            - strong [ref=e46]: 幹事キラー 佐藤
+            - generic [ref=e47]: R
+          - generic [ref=e48]:
+            - generic [ref=e49]: 無
+            - generic [ref=e50]: 🎫
+            - generic [ref=e51]: ★
+          - generic [ref=e52]: "[出席者 / 無]"
+          - paragraph [ref=e53]: gemini api 通信失敗時に生成される下級モンスター
+          - generic [ref=e54]:
+            - generic [ref=e55]: ATK200
+            - generic [ref=e56]: DEF1000
+        - article "出席の達人 高橋" [ref=e57]:
+          - generic [ref=e58]:
+            - strong [ref=e59]: 出席の達人 高橋
+            - generic [ref=e60]: R
+          - generic [ref=e61]:
+            - generic [ref=e62]: 無
+            - generic [ref=e63]: 🎫
+            - generic [ref=e64]: ★
+          - generic [ref=e65]: "[出席者 / 無]"
+          - paragraph [ref=e66]: gemini api 通信失敗時に生成される下級モンスター
+          - generic [ref=e67]:
+            - generic [ref=e68]: ATK200
+            - generic [ref=e69]: DEF1000
+        - article "幹事キラー 中村" [ref=e70]:
+          - generic [ref=e71]:
+            - strong [ref=e72]: 幹事キラー 中村
+            - generic [ref=e73]: R
+          - generic [ref=e74]:
+            - generic [ref=e75]: 無
+            - generic [ref=e76]: 🎫
+            - generic [ref=e77]: ★
+          - generic [ref=e78]: "[出席者 / 無]"
+          - paragraph [ref=e79]: gemini api 通信失敗時に生成される下級モンスター
+          - generic [ref=e80]:
+            - generic [ref=e81]: ATK200
+            - generic [ref=e82]: DEF1000
+      - figure [ref=e84]:
+        - table [ref=e85]:
+          - rowgroup [ref=e86]:
+            - row "名前 2026/06/01 (月) 19:00 操作" [ref=e87]:
+              - columnheader "名前" [ref=e88]
+              - columnheader "2026/06/01 (月) 19:00" [ref=e89]
+              - columnheader "操作" [ref=e90]
+          - rowgroup [ref=e91]:
+            - row "田中 ○ 田中 の回答を編集" [ref=e92]:
+              - cell "田中" [ref=e93]
+              - cell "○" [ref=e94]
+              - cell "田中 の回答を編集" [ref=e95]:
+                - button "田中 の回答を編集" [ref=e96] [cursor=pointer]: 編集
+            - row "田中B ○ 田中B の回答を編集" [ref=e97]:
+              - cell "田中B" [ref=e98]
+              - cell "○" [ref=e99]
+              - cell "田中B の回答を編集" [ref=e100]:
+                - button "田中B の回答を編集" [ref=e101] [cursor=pointer]: 編集
+            - row "佐藤 ○ 佐藤 の回答を編集" [ref=e102]:
+              - cell "佐藤" [ref=e103]
+              - cell "○" [ref=e104]
+              - cell "佐藤 の回答を編集" [ref=e105]:
+                - button "佐藤 の回答を編集" [ref=e106] [cursor=pointer]: 編集
+            - row "高橋 ○ 高橋 の回答を編集" [ref=e107]:
+              - cell "高橋" [ref=e108]
+              - cell "○" [ref=e109]
+              - cell "高橋 の回答を編集" [ref=e110]:
+                - button "高橋 の回答を編集" [ref=e111] [cursor=pointer]: 編集
+            - row "中村 ○ 中村 の回答を編集" [ref=e112]:
+              - cell "中村" [ref=e113]
+              - cell "○" [ref=e114]
+              - cell "中村 の回答を編集" [ref=e115]:
+                - button "中村 の回答を編集" [ref=e116] [cursor=pointer]: 編集
+            - row "集計 ○ 5 △ 0 × 0" [ref=e117]:
+              - cell "集計" [ref=e118]
+              - cell "○ 5 △ 0 × 0" [ref=e119]
+              - cell [ref=e120]
+      - separator [ref=e121]
+      - heading "回答する" [level=2] [ref=e122]
+      - generic [ref=e123]:
+        - generic [ref=e124]:
+          - text: 名前
+          - textbox "名前" [ref=e125]
+        - group "2026/06/01 (月) 19:00" [ref=e126]:
+          - generic [ref=e127]: 2026/06/01 (月) 19:00
+          - generic [ref=e128]:
+            - generic [ref=e129] [cursor=pointer]:
+              - radio "○" [ref=e130]
+              - text: ○
+            - generic [ref=e131] [cursor=pointer]:
+              - radio "△" [ref=e132]
+              - text: △
+            - generic [ref=e133] [cursor=pointer]:
+              - radio "×" [ref=e134]
+              - text: ×
+        - group [ref=e135]:
+          - button "回答する" [ref=e136] [cursor=pointer]

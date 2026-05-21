@@ -2044,9 +2044,101 @@ describe("routes (Hono sub-app) mounted on app", () => {
         // Assert
         // form 要素が存在し、その上で htmx の after-request フックで this.reset() が呼ばれる、
         // という観察可能な振る舞いを確認する。クオート種別（シングル/ダブル）は実装の表現揺れ
-        // として吸収する。
+        // として吸収する。aria-busy 解除などのフックと同一属性値内で連結される場合があるため、
+        // `this.reset()` はサブストリング一致で観察する（完全一致は実装結合度が高すぎる）。
         expect(body).toMatch(/<form[^>]*>/i);
-        expect(body).toMatch(/hx-on::after-request=["']this\.reset\(\)["']/);
+        expect(body).toMatch(/hx-on::after-request=["'][^"']*this\.reset\(\)[^"']*["']/);
+      });
+
+      /**
+       * 多重送信防止 & ローディング表示（create モード）
+       *
+       * 背景:
+       *  - 「回答する」ボタンを連打すると同じ name + 回答が 2 重に POST されうる
+       *  - また、リクエスト中であることをユーザに視覚的に知らせる必要がある
+       *
+       * 観察可能な振る舞い:
+       *  - フォームに `hx-disabled-elt` 属性があり、送信ボタンが disable 対象として宣言されている
+       *    （htmx がリクエスト中に該当要素へ `disabled` を付与し、終了時に外す。クリック自体の
+       *    DOM 状態遷移は E2E に委ねるが、属性が宣言されていることは単体で観察できる）
+       *  - 送信ボタン側に htmx の before-request / after-request フックがあり、`aria-busy` を
+       *    true / false に切り替える指示が記述されている
+       *
+       * スコープ外（E2E に委ねる）:
+       *  - 実際にクリックしてリクエストが飛んでいる最中に `disabled` 属性が DOM に付くこと
+       *  - 連打した結果、サーバ側で受け付けた POST が 1 件だけになること
+       *  - スピナーの形状や CSS（pico.css の aria-busy 描画）
+       */
+      it("回答フォーム（create モード）の form 要素または送信ボタンに hx-disabled-elt 属性が付与され、リクエスト中に送信ボタンが disabled 化される対象として宣言されている", async () => {
+        // Arrange
+        await seedEvent({
+          id: "evt-form-disabled-elt",
+          title: "新年会",
+          options: ["2026-01-10 19:00"],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-form-disabled-elt"),
+        );
+        const body = await response.text();
+
+        // Assert
+        // 観察可能な振る舞いとして、hx-disabled-elt 属性が宣言されていること自体を確認する。
+        // 値（セレクタ）の具体は実装裁量として観察しない（クリック中の DOM 遷移は E2E に委ねる）。
+        expect(body).toMatch(/hx-disabled-elt=["'][^"']+["']/i);
+      });
+      // Bun の `it.todo` は `fn` 引数が必須のため、`() => {}` を渡す（本ファイル既存規約）。
+      it("回答フォーム（create モード）の送信ボタンに hx-on::before-request フックがあり、aria-busy を 'true' に設定する指示が含まれている", async () => {
+        // Arrange
+        await seedEvent({
+          id: "evt-form-busy-on",
+          title: "新年会",
+          options: ["2026-01-10 19:00"],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-form-busy-on"),
+        );
+        const body = await response.text();
+
+        // Assert
+        // 観察可能な振る舞いとして、送信ボタン（type="submit"）に hx-on::before-request フックが
+        // 宣言され、その値に aria-busy と true の双方が含まれていることを確認する。
+        // 属性順序やクオート種別（' / "）は実装裁量。
+        // NOTE: もし「form 全体に hx-on::before-request を付ける」実装に切り替える場合は、
+        //       下の <button> 限定マッチを `body.match(/hx-on::before-request=...).../i)` のような
+        //       要素非依存の緩い形に変えること。
+        expect(body).toMatch(/<form[^>]*hx-on::before-request=[^>]*aria-busy[^>]*>/i);
+        expect(body).toMatch(/hx-on::before-request=["'][^"']*aria-busy[^"']*true[^"']*["']/i);
+      });
+      it("回答フォーム（create モード）の送信ボタンに hx-on::after-request フックがあり、aria-busy を 'false'（または属性除去）に戻す指示が含まれている", async () => {
+        // Arrange
+        await seedEvent({
+          id: "evt-form-busy-off",
+          title: "新年会",
+          options: ["2026-01-10 19:00"],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-form-busy-off"),
+        );
+        const body = await response.text();
+
+        // Assert
+        // 観察可能な振る舞いとして、送信ボタン（type="submit"）に hx-on::after-request フックが
+        // 宣言され、その値に aria-busy が含まれていることを確認する。
+        // form 側にも既存の hx-on::after-request="this.reset()" が付与されているため、
+        // ここでは <button type="submit" ...> 要素に限定してマッチさせ、別個のフックが
+        // ボタンに付いていることを観察する。
+        // 値が「解除」を意図することは、`aria-busy ... false` か `removeAttribute('aria-busy')`
+        // のいずれかを許容する形で観察する（属性順序・クオート種別は実装裁量）。
+        expect(body).toMatch(/<form[^>]*hx-on::after-request=[^>]*aria-busy[^>]*>/i);
+        expect(body).toMatch(
+          /hx-on::after-request=["'][^"']*(aria-busy[^"']*false|removeAttribute\(['"]aria-busy['"]\))[^"']*["']/i,
+        );
       });
     });
 
@@ -3383,6 +3475,113 @@ describe("routes (Hono sub-app) mounted on app", () => {
         // 本文に含まれないことで間接的に確認する（属性順や input/textarea の選択など
         // 実装の詳細には踏み込まない範囲で「customAnswer」という送信キー名の不在を見る）
         expect(body).not.toContain("customAnswer");
+      });
+
+      /**
+       * 多重送信防止 & ローディング表示（edit モード）
+       *
+       * 背景:
+       *  - 「更新する」ボタンの連打も create モードと同様に多重送信を引き起こしうる
+       *  - create と edit でフォームは同一コンポーネント（`ResponseFormRow`）から描画されるが、
+       *    送信先が `hx-put` か `hx-post` か等で分岐がある。多重送信防止 / ローディング表示の
+       *    属性が edit モードでも欠落していないことを観察しておく
+       *
+       * 観察可能な振る舞い:
+       *  - 編集フォームのフラグメントにも `hx-disabled-elt` 宣言が含まれる
+       *  - 「更新する」ボタン側に aria-busy を切り替える before-request / after-request フックが
+       *    含まれる
+       *
+       * スコープ外（E2E に委ねる）:
+       *  - 実際の連打 → DOM の disabled / aria-busy 遷移
+       */
+      // Bun の `it.todo` は `fn` 引数が必須のため、`() => {}` を渡す（本ファイル既存規約）。
+      it("編集フォームフラグメント（edit モード）の form 要素または送信ボタンに hx-disabled-elt 属性が付与され、リクエスト中に送信ボタンが disabled 化される対象として宣言されている", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-edit-disabled-elt",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-edit-disabled-elt",
+          name: "山田太郎",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          buildGetEditRequest("evt-edit-disabled-elt", responseId),
+        );
+        const body = await response.text();
+
+        // Assert
+        // 観察可能な振る舞いとして、edit モードのフラグメント本文に hx-disabled-elt 属性が
+        // 宣言されていることを確認する。値（セレクタ）の具体は実装裁量として観察しない
+        // （クリック中の DOM 遷移は E2E に委ねる）。
+        expect(body).toMatch(/hx-disabled-elt=["'][^"']+["']/i);
+      });
+      it("編集フォームフラグメント（edit モード）の送信ボタンに hx-on::before-request フックがあり、aria-busy を 'true' に設定する指示が含まれている", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-edit-busy-on",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-edit-busy-on",
+          name: "山田太郎",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+
+        // Act
+        const response = await localApp.fetch(buildGetEditRequest("evt-edit-busy-on", responseId));
+        const body = await response.text();
+
+        // Assert
+        // 観察可能な振る舞いとして、edit モードのフラグメント本文の送信ボタン（type="submit"）に
+        // hx-on::before-request フックが宣言され、その値に aria-busy と true の双方が含まれて
+        // いることを確認する。属性順序やクオート種別（' / "）は実装裁量。
+        expect(body).toMatch(/<form[^>]*hx-on::before-request=[^>]*aria-busy[^>]*>/i);
+        expect(body).toMatch(/hx-on::before-request=["'][^"']*aria-busy[^"']*true[^"']*["']/i);
+      });
+      it("編集フォームフラグメント（edit モード）の送信ボタンに hx-on::after-request フックがあり、aria-busy を 'false'（または属性除去）に戻す指示が含まれている", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-edit-busy-off",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-edit-busy-off",
+          name: "山田太郎",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+
+        // Act
+        const response = await localApp.fetch(buildGetEditRequest("evt-edit-busy-off", responseId));
+        const body = await response.text();
+
+        // Assert
+        // 観察可能な振る舞いとして、edit モードのフラグメント本文の送信ボタン（type="submit"）に
+        // hx-on::after-request フックが宣言され、その値に aria-busy が含まれていることを確認する。
+        // 値が「解除」を意図することは、`aria-busy ... false` か `removeAttribute('aria-busy')`
+        // のいずれかで満たされていれば良い（具体的な書き方は実装裁量）。
+        expect(body).toMatch(/<form[^>]*hx-on::after-request=[^>]*aria-busy[^>]*>/i);
+        expect(body).toMatch(
+          /hx-on::after-request=["'][^"']*(aria-busy[^"']*false|removeAttribute\(['"]aria-busy['"]\))[^"']*["']/i,
+        );
       });
     });
 
