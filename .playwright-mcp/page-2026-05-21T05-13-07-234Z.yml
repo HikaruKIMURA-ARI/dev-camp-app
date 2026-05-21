@@ -1,0 +1,131 @@
+- generic [active] [ref=e1]:
+    - banner [ref=e2]:
+        - navigation [ref=e3]:
+            - list [ref=e4]:
+                - listitem [ref=e5]:
+                    - strong [ref=e6]: BI調整San
+            - list [ref=e7]:
+                - listitem [ref=e8]:
+                    - button "テーマ切り替え" [ref=e9] [cursor=pointer]:
+                        - img [ref=e10]
+    - main [ref=e12]:
+        - article [ref=e13]:
+            - heading "UI最適化検証会" [level=1] [ref=e14]
+            - list [ref=e15]:
+                - listitem [ref=e16]: 2026/06/01 (月) 19:00
+                - listitem [ref=e17]: 2026/06/02 (火) 19:00
+            - paragraph [ref=e18]:
+                - strong [ref=e19]: "設問:"
+                - text: 参加費は1万円までOK？
+            - generic [ref=e20]:
+                - article "紅蓮の覇王 勇者リオン" [ref=e21]:
+                    - generic [ref=e22]:
+                        - strong [ref=e23]: 紅蓮の覇王 勇者リオン
+                        - text: UR
+                    - generic [ref=e24]: 炎
+                    - generic [ref=e25]: ドラゴン
+                    - paragraph [ref=e26]: 竜の血を引きし王。出席率の高さは伝説級。
+                    - generic [ref=e27]: ATK 3000DEF 2500
+                - article "星詠みの賢者 ミラ" [ref=e28]:
+                    - generic [ref=e29]:
+                        - strong [ref=e30]: 星詠みの賢者 ミラ
+                        - text: SR
+                    - generic [ref=e31]: 光
+                    - generic [ref=e32]: 魔法使い
+                    - paragraph [ref=e33]: 星の声を聞き、未来の幹事を予言する。
+                    - generic [ref=e34]: ATK 2200DEF 2000
+                - article "豪剣の戦士 グレイ" [ref=e35]:
+                    - generic [ref=e36]:
+                        - strong [ref=e37]: 豪剣の戦士 グレイ
+                        - text: R
+                    - generic [ref=e38]: 土
+                    - generic [ref=e39]: 戦士
+                    - paragraph [ref=e40]: 二日酔いを物ともしない鋼の意志。
+                    - generic [ref=e41]: ATK 1600DEF 1400
+                - article "影の盗賊 シャドウ" [ref=e42]:
+                    - generic [ref=e43]:
+                        - strong [ref=e44]: 影の盗賊 シャドウ
+                        - text: "N"
+                    - generic [ref=e45]: 闇
+                    - generic [ref=e46]: 盗賊
+                    - paragraph [ref=e47]: 幹事の財布から会費を回収する者。
+                    - generic [ref=e48]: ATK 900DEF 600
+            - figure [ref=e50]:
+                - table [ref=e51]:
+                    - rowgroup [ref=e52]:
+                        - row "名前 2026/06/01 (月) 19:00 2026/06/02 (火) 19:00 参加費は1万円までOK？ 操作" [ref=e53]:
+                            - columnheader "名前" [ref=e54]
+                            - columnheader "2026/06/01 (月) 19:00" [ref=e55]
+                            - columnheader "2026/06/02 (火) 19:00" [ref=e56]
+                            - columnheader "参加費は1万円までOK？" [ref=e57]
+                            - columnheader "操作" [ref=e58]
+                    - rowgroup [ref=e59]:
+                        - row "勇者リオン ○ △ はい 勇者リオン の回答を編集" [ref=e60]:
+                            - cell "勇者リオン" [ref=e61]
+                            - cell "○" [ref=e62]
+                            - cell "△" [ref=e63]
+                            - cell "はい" [ref=e64]
+                            - cell "勇者リオン の回答を編集" [ref=e65]:
+                                - button "勇者リオン の回答を編集" [ref=e66] [cursor=pointer]: 編集
+                        - row "賢者ミラ ○ △ はい 賢者ミラ の回答を編集" [ref=e67]:
+                            - cell "賢者ミラ" [ref=e68]
+                            - cell "○" [ref=e69]
+                            - cell "△" [ref=e70]
+                            - cell "はい" [ref=e71]
+                            - cell "賢者ミラ の回答を編集" [ref=e72]:
+                                - button "賢者ミラ の回答を編集" [ref=e73] [cursor=pointer]: 編集
+                        - row "戦士グレイ ○ △ はい 戦士グレイ の回答を編集" [ref=e74]:
+                            - cell "戦士グレイ" [ref=e75]
+                            - cell "○" [ref=e76]
+                            - cell "△" [ref=e77]
+                            - cell "はい" [ref=e78]
+                            - cell "戦士グレイ の回答を編集" [ref=e79]:
+                                - button "戦士グレイ の回答を編集" [ref=e80] [cursor=pointer]: 編集
+                        - row "盗賊シャドウ ○ △ はい 盗賊シャドウ の回答を編集" [ref=e81]:
+                            - cell "盗賊シャドウ" [ref=e82]
+                            - cell "○" [ref=e83]
+                            - cell "△" [ref=e84]
+                            - cell "はい" [ref=e85]
+                            - cell "盗賊シャドウ の回答を編集" [ref=e86]:
+                                - button "盗賊シャドウ の回答を編集" [ref=e87] [cursor=pointer]: 編集
+                        - row "集計 ○ 4 △ 0 × 0 ○ 0 △ 4 × 0" [ref=e88]:
+                            - cell "集計" [ref=e89]
+                            - cell "○ 4 △ 0 × 0" [ref=e90]
+                            - cell "○ 0 △ 4 × 0" [ref=e91]
+                            - cell [ref=e92]
+                            - cell [ref=e93]
+            - separator [ref=e94]
+            - heading "回答する" [level=2] [ref=e95]
+            - generic [ref=e96]:
+                - generic [ref=e97]:
+                    - text: 名前
+                    - textbox "名前" [ref=e98]
+                - group "2026/06/01 (月) 19:00" [ref=e99]:
+                    - generic [ref=e100]: 2026/06/01 (月) 19:00
+                    - generic [ref=e101]:
+                        - generic [ref=e102] [cursor=pointer]:
+                            - radio "○" [ref=e103]
+                            - text: ○
+                        - generic [ref=e104] [cursor=pointer]:
+                            - radio "△" [ref=e105]
+                            - text: △
+                        - generic [ref=e106] [cursor=pointer]:
+                            - radio "×" [ref=e107]
+                            - text: ×
+                - group "2026/06/02 (火) 19:00" [ref=e108]:
+                    - generic [ref=e109]: 2026/06/02 (火) 19:00
+                    - generic [ref=e110]:
+                        - generic [ref=e111] [cursor=pointer]:
+                            - radio "○" [ref=e112]
+                            - text: ○
+                        - generic [ref=e113] [cursor=pointer]:
+                            - radio "△" [ref=e114]
+                            - text: △
+                        - generic [ref=e115] [cursor=pointer]:
+                            - radio "×" [ref=e116]
+                            - text: ×
+                - generic [ref=e117]:
+                    - text: 参加費は1万円までOK？
+                    - textbox "参加費は1万円までOK？" [ref=e118]
+                - group [ref=e119]:
+                    - button "回答する" [ref=e120] [cursor=pointer]

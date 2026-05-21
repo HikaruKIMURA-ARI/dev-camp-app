@@ -79,13 +79,7 @@ const TIMEOUT_SENTINEL: unique symbol = Symbol("gemini_timeout");
 const DEFAULT_TIMEOUT_MS = 4000;
 const DEFAULT_MODEL = "gemini-2.0-flash";
 
-const SCHEMA_STRING_KEYS = [
-  "title",
-  "rarity",
-  "attribute",
-  "race",
-  "flavor",
-] as const;
+const SCHEMA_STRING_KEYS = ["title", "rarity", "attribute", "race", "flavor"] as const;
 const SCHEMA_NUMBER_KEYS = ["attack", "defense"] as const;
 
 const RESPONSE_SCHEMA = {
@@ -93,18 +87,15 @@ const RESPONSE_SCHEMA = {
   properties: {
     title: {
       type: "STRING",
-      description:
-        "参加者名を必ず含む遊戯王モンスター風の二つ名。60 文字以内。",
+      description: "参加者名を必ず含む遊戯王モンスター風の二つ名。60 文字以内。",
     },
     rarity: {
       type: "STRING",
-      description:
-        "レアリティ。UR / SR / R / N が推奨。それ以外も可。16 文字以内。",
+      description: "レアリティ。UR / SR / R / N が推奨。それ以外も可。16 文字以内。",
     },
     attribute: {
       type: "STRING",
-      description:
-        "属性。光 / 闇 / 水 / 風 / 地 / 火 が推奨。それ以外も可。16 文字以内。",
+      description: "属性。光 / 闇 / 水 / 風 / 地 / 火 が推奨。それ以外も可。16 文字以内。",
     },
     race: {
       type: "STRING",
@@ -113,8 +104,7 @@ const RESPONSE_SCHEMA = {
     },
     flavor: {
       type: "STRING",
-      description:
-        "1 行のフレーバーテキスト。改行・制御文字を含めない。120 文字以内。",
+      description: "1 行のフレーバーテキスト。改行・制御文字を含めない。120 文字以内。",
     },
     attack: {
       type: "INTEGER",
@@ -125,15 +115,7 @@ const RESPONSE_SCHEMA = {
       description: "守備力。0 以上 9999 以下の整数。",
     },
   },
-  required: [
-    "title",
-    "rarity",
-    "attribute",
-    "race",
-    "flavor",
-    "attack",
-    "defense",
-  ],
+  required: ["title", "rarity", "attribute", "race", "flavor", "attack", "defense"],
 } as const;
 
 const RARITY_CANDIDATES = "UR / SR / R / N";
@@ -224,9 +206,7 @@ export const defaultCardGenerator: CardGenerator = {
     const apiKey = process.env.GEMINI_API_KEY;
     const client = new GoogleGenAI({ apiKey });
 
-    const timeoutMs = Number(
-      process.env.GEMINI_TIMEOUT_MS ?? String(DEFAULT_TIMEOUT_MS)
-    );
+    const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS ?? String(DEFAULT_TIMEOUT_MS));
 
     const config: Record<string, unknown> = {
       responseMimeType: "application/json",
@@ -235,8 +215,7 @@ export const defaultCardGenerator: CardGenerator = {
     const temp = process.env.GEMINI_TEMPERATURE;
     if (temp !== undefined && temp !== "") config.temperature = Number(temp);
     const maxTok = process.env.GEMINI_MAX_OUTPUT_TOKENS;
-    if (maxTok !== undefined && maxTok !== "")
-      config.maxOutputTokens = Number(maxTok);
+    if (maxTok !== undefined && maxTok !== "") config.maxOutputTokens = Number(maxTok);
 
     let response: unknown;
     try {

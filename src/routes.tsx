@@ -1,15 +1,16 @@
 import { type Context, Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
+import { cardService } from "./cards";
 import {
   type Answer,
-  addResponse,
   createEvent,
   getEventWithOptions,
   getResponseById,
   updateResponse,
 } from "./db";
 import {
+  CardsCarousel,
   EventNewForm,
   type EventNewFormValues,
   EventPage,
@@ -206,20 +207,21 @@ const validateResponseSubmission = (
   };
 };
 
-// 回答書き込み後の共通レスポンス: 最新状態を再取得して集計表フラグメントを返す。
-// htmx の `#responses` ターゲットと整合させるため、外側を id 付きラッパで囲む。
-const renderResponsesTableFragment = async (c: Context, eventId: string) => {
+const renderResponseSubmissionFragment = async (c: Context, eventId: string) => {
   const updated = await getEventWithOptions(eventId);
   if (!updated) return c.notFound();
   return c.html(
-    <div id="responses">
-      <ResponsesTable
-        event={updated.event}
-        options={updated.options}
-        responses={updated.responses}
-        aggregates={updated.aggregates}
-      />
-    </div>,
+    <>
+      <div id="responses">
+        <ResponsesTable
+          event={updated.event}
+          options={updated.options}
+          responses={updated.responses}
+          aggregates={updated.aggregates}
+        />
+      </div>
+      <CardsCarousel responses={updated.responses} oob />
+    </>,
   );
 };
 
@@ -234,9 +236,9 @@ routes.post("/events/:id/responses", async (c) => {
   const validated = validateResponseSubmission(c, raw, validOptionIds);
   if (!validated.ok) return validated.response;
 
-  await addResponse(id, validated.data);
+  await cardService.generateAndPersist(id, validated.data);
 
-  return renderResponsesTableFragment(c, id);
+  return renderResponseSubmissionFragment(c, id);
 });
 
 routes.get("/events/:id/responses/:responseId/edit", async (c) => {
@@ -284,7 +286,7 @@ routes.put("/events/:id/responses/:responseId", async (c) => {
 
   await updateResponse(eventId, responseId, validated.data);
 
-  return renderResponsesTableFragment(c, eventId);
+  return renderResponseSubmissionFragment(c, eventId);
 });
 
 export default routes;

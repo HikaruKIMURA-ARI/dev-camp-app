@@ -17,6 +17,7 @@ app.get(
   "/static/pico.min.css",
   serveStatic({ path: "./node_modules/@picocss/pico/css/pico.min.css" }),
 );
+app.get("/static/app.css", serveStatic({ path: "./public/app.css" }));
 
 app.post("/theme", (c) => {
   const next: Theme = getCookie(c, THEME_COOKIE) === "dark" ? "light" : "dark";

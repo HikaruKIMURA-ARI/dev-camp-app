@@ -1,13 +1,104 @@
 import type { Child, FC } from "hono/jsx";
+import type { PersistedCard } from "./db";
 import type { Event, EventOption, EventResponse } from "./schema";
 
 export type Theme = "dark" | "light";
 
 export type Answer = "○" | "△" | "×";
 
-export type ResponseWithAnswers = EventResponse & { answers: Record<string, Answer> };
+export type ResponseWithAnswers = EventResponse & {
+  answers: Record<string, Answer>;
+  card?: PersistedCard | null;
+};
 
 export type Aggregates = Record<string, { circle: number; triangle: number; cross: number }>;
+
+const RACE_EMOJI: Record<string, string> = {
+  ドラゴン: "🐉",
+  戦士: "⚔️",
+  魔法使い: "🔮",
+  アンデッド: "💀",
+  悪魔: "👹",
+  幻獣: "🦅",
+  魚: "🐟",
+  サイバー: "🤖",
+  盗賊: "🥷",
+  ヒト: "👤",
+  出席者: "🎫",
+};
+
+const ATTRIBUTE_CLASS: Record<string, string> = {
+  火: "yc-attr-fire",
+  水: "yc-attr-water",
+  光: "yc-attr-light",
+  闇: "yc-attr-dark",
+  風: "yc-attr-wind",
+  地: "yc-attr-earth",
+};
+
+const RARITY_STARS: Record<string, number> = {
+  UR: 3,
+  SR: 2,
+  R: 1,
+  N: 0,
+};
+
+const CardView: FC<{ card: PersistedCard }> = ({ card }) => {
+  const rarity = card.rarity.toLowerCase();
+  const emoji = RACE_EMOJI[card.race] ?? "✨";
+  const attrClass = ATTRIBUTE_CLASS[card.attribute] ?? "yc-attr-none";
+  const starCount = RARITY_STARS[card.rarity] ?? 0;
+  return (
+    <article class={`card-rarity-${rarity}`} aria-label={card.title}>
+      <header class="yc-header">
+        <strong class="yc-title">{card.title}</strong>
+        <span class="yc-rarity-badge">{card.rarity}</span>
+      </header>
+      <div class={`yc-art ${attrClass}`}>
+        <div class="yc-art-attribute">{card.attribute}</div>
+        <div class="yc-art-emoji" aria-hidden="true">
+          {emoji}
+        </div>
+        {starCount > 0 ? (
+          <div class="yc-art-stars" aria-hidden="true">
+            {"★".repeat(starCount)}
+          </div>
+        ) : null}
+      </div>
+      <div class="yc-meta">
+        [<span>{card.race}</span> / <span>{card.attribute}</span>]
+      </div>
+      <p class="yc-flavor">{card.flavor}</p>
+      <div class="yc-stats">
+        <span class="yc-stat">
+          <span class="yc-stat-label">ATK</span>
+          <span class="yc-stat-value">{card.attack}</span>
+        </span>
+        <span class="yc-stat">
+          <span class="yc-stat-label">DEF</span>
+          <span class="yc-stat-value">{card.defense}</span>
+        </span>
+      </div>
+    </article>
+  );
+};
+
+export const CardsCarousel: FC<{ responses: ResponseWithAnswers[]; oob?: boolean }> = ({
+  responses,
+  oob,
+}) => (
+  <div id="cards" class="cards-carousel" {...(oob ? { "hx-swap-oob": "true" } : {})}>
+    {responses.map((r) =>
+      r.card ? (
+        <CardView card={r.card} />
+      ) : (
+        <article class="yc-pending" aria-label={r.name}>
+          カードを生成中…
+        </article>
+      ),
+    )}
+  </div>
+);
 
 export type EventNewFormValues = {
   title?: string;
@@ -223,6 +314,7 @@ export const EventPage: FC<{
           <strong>設問:</strong> {event.customQuestion}
         </p>
       ) : null}
+      <CardsCarousel responses={responses} />
       <div id="responses">
         <ResponsesTable
           event={event}
@@ -348,6 +440,7 @@ export const Layout: FC<{ theme?: Theme; children?: Child }> = ({ children, them
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <title>devcamp</title>
       <link rel="stylesheet" href="/static/pico.min.css" />
+      <link rel="stylesheet" href="/static/app.css" />
       <script src="/static/htmx.min.js" defer />
       <script src="/static/alpine.min.js" defer />
     </head>

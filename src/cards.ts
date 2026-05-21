@@ -1,14 +1,5 @@
-import {
-  addResponseWithCard,
-  type PersistedCard,
-  type Tier,
-  type CardAttributes,
-} from "./db";
-import {
-  defaultCardGenerator,
-  QuotaExhaustedError,
-  type RawCardAttributes,
-} from "./gemini";
+import { addResponseWithCard, type PersistedCard, type Tier, type CardAttributes } from "./db";
+import { defaultCardGenerator, QuotaExhaustedError, type RawCardAttributes } from "./gemini";
 
 export type ResponseSubmissionInput = {
   name: string;
@@ -106,7 +97,7 @@ function buildTemplateCard(name: string): CardAttributes {
 export const cardService = {
   generateAndPersist: async (
     eventId: string,
-    input: ResponseSubmissionInput
+    input: ResponseSubmissionInput,
   ): Promise<{ responseId: number; card: PersistedCard }> => {
     let card: CardAttributes;
     let tier: Tier;

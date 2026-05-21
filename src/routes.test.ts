@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import type { Hono } from "hono";
 import app from "./index";
 
@@ -946,6 +946,380 @@ describe("routes (Hono sub-app) mounted on app", () => {
         expect(firstIdx).toBeGreaterThan(-1);
         expect(secondIdx).toBeGreaterThan(firstIdx);
         expect(thirdIdx).toBeGreaterThan(secondIdx);
+      });
+    });
+
+    describe("カルーセル領域（Task 3.2）", () => {
+      // 子テーブル `participant_cards` は外側 `beforeEach` で `event_responses` 削除時に
+      // FK cascade で消えるが、明示性のため本 describe でも先頭で truncate する。
+      beforeEach(async () => {
+        await database.delete(schema.participantCards);
+      });
+
+      describe("カード件数", () => {
+        // Arrange — 同一イベントに参加者 3 名、各々に participant_cards を 1 枚ずつ seed
+        beforeEach(async () => {
+          const seeded = await seedEvent({
+            id: "evt-cards-count",
+            title: "新年会",
+            options: ["2026-01-10 19:00"],
+          });
+          const [opt] = seeded.optionIds;
+          const participants: Array<{ name: string; rarity: "UR" | "SR" | "R" }> = [
+            { name: "山田太郎", rarity: "R" },
+            { name: "佐藤花子", rarity: "SR" },
+            { name: "鈴木一郎", rarity: "UR" },
+          ];
+          for (const p of participants) {
+            const { responseId } = await seedResponse({
+              eventId: "evt-cards-count",
+              name: p.name,
+              answers: [{ optionId: opt!, answer: "○" }],
+            });
+            await database.insert(schema.participantCards).values({
+              responseId,
+              title: `勇者${p.name}`,
+              rarity: p.rarity,
+              attribute: "火",
+              race: "戦士",
+              flavor: "テストフレーバー",
+              attack: 1000,
+              defense: 800,
+              tier: "default",
+            });
+          }
+        });
+
+        it("回答が 1 件以上あるとき、#cards 領域に responses 件数と一致する数のカードが描画される", async () => {
+          // Act
+          const response = await localApp.fetch(
+            new Request("http://localhost:8787/events/evt-cards-count"),
+          );
+          const body = await response.text();
+
+          // Assert
+          // 各カードは `class="card-rarity-..."` を持つ前提（task 3.2 の実装規約）。
+          // カード単位の DOM 要素を識別する安定マーカーとして、その出現回数を数える。
+          const cardCount = (body.match(/class="card-rarity-/g) ?? []).length;
+          expect(cardCount).toBe(3);
+        });
+      });
+
+      describe("DOM 構造上の順序", () => {
+        // Arrange — イベント・候補・参加者 1 名・participant_cards 1 件を seed
+        beforeEach(async () => {
+          const seeded = await seedEvent({
+            id: "evt-cards-order",
+            title: "新年会",
+            options: ["2026-01-10 19:00"],
+          });
+          const [opt] = seeded.optionIds;
+          const { responseId } = await seedResponse({
+            eventId: "evt-cards-order",
+            name: "山田太郎",
+            answers: [{ optionId: opt!, answer: "○" }],
+          });
+          await database.insert(schema.participantCards).values({
+            responseId,
+            title: "勇者ヤマダ",
+            rarity: "R",
+            attribute: "火",
+            race: "戦士",
+            flavor: "テストフレーバー",
+            attack: 1000,
+            defense: 800,
+            tier: "default",
+          });
+        });
+
+        it("#cards 領域は #responses よりも DOM 上で前に出現する", async () => {
+          // Act
+          const response = await localApp.fetch(
+            new Request("http://localhost:8787/events/evt-cards-order"),
+          );
+          const body = await response.text();
+
+          // Assert
+          expect(response.status).toBe(200);
+          const cardsIdx = body.indexOf('id="cards"');
+          const responsesIdx = body.indexOf('id="responses"');
+          expect(cardsIdx).toBeGreaterThan(-1);
+          expect(responsesIdx).toBeGreaterThan(-1);
+          expect(cardsIdx).toBeLessThan(responsesIdx);
+        });
+      });
+
+      describe("各カードの 7 属性", () => {
+        // Arrange — 検証用に各属性へユニークな値を持つカードを 1 件 seed
+        beforeEach(async () => {
+          const seeded = await seedEvent({
+            id: "evt-cards-attrs",
+            title: "新年会",
+            options: ["2026-01-10 19:00"],
+          });
+          const [opt] = seeded.optionIds;
+          const { responseId } = await seedResponse({
+            eventId: "evt-cards-attrs",
+            name: "山田太郎",
+            answers: [{ optionId: opt!, answer: "○" }],
+          });
+          await database.insert(schema.participantCards).values({
+            responseId,
+            title: "二つ名XYZ",
+            rarity: "UR",
+            attribute: "光",
+            race: "ドラゴン",
+            flavor: "ユニークフレーバー文字列",
+            attack: 1234,
+            defense: 5678,
+            tier: "default",
+          });
+        });
+
+        it("各カードに 7 属性（二つ名 / レアリティ / 属性 / 種族 / フレーバー / ATK / DEF）がすべて含まれる", async () => {
+          // Act
+          const response = await localApp.fetch(
+            new Request("http://localhost:8787/events/evt-cards-attrs"),
+          );
+          const body = await response.text();
+
+          // Assert
+          expect(body).toContain("二つ名XYZ");
+          expect(body).toContain("UR");
+          expect(body).toContain("光");
+          expect(body).toContain("ドラゴン");
+          expect(body).toContain("ユニークフレーバー文字列");
+          expect(body).toContain("1234");
+          expect(body).toContain("5678");
+        });
+      });
+      describe("レアリティに応じた class 付与", () => {
+        // Arrange — 同一イベントに 4 名の参加者を seed し、それぞれ UR/SR/R/N の card を 1 枚ずつ持たせる
+        beforeEach(async () => {
+          const seeded = await seedEvent({
+            id: "evt-cards-rarity",
+            title: "新年会",
+            options: ["2026-01-10 19:00"],
+          });
+          const [opt] = seeded.optionIds;
+          const participants: Array<{ name: string; rarity: "UR" | "SR" | "R" | "N" }> = [
+            { name: "山田太郎", rarity: "UR" },
+            { name: "佐藤花子", rarity: "SR" },
+            { name: "鈴木一郎", rarity: "R" },
+            { name: "田中次郎", rarity: "N" },
+          ];
+          for (const p of participants) {
+            const { responseId } = await seedResponse({
+              eventId: "evt-cards-rarity",
+              name: p.name,
+              answers: [{ optionId: opt!, answer: "○" }],
+            });
+            await database.insert(schema.participantCards).values({
+              responseId,
+              title: `勇者${p.name}`,
+              rarity: p.rarity,
+              attribute: "火",
+              race: "戦士",
+              flavor: "テストフレーバー",
+              attack: 1000,
+              defense: 800,
+              tier: "default",
+            });
+          }
+        });
+
+        it("カードのレアリティに応じた class（card-rarity-ur / sr / r / n）が付与される", async () => {
+          // Act
+          const response = await localApp.fetch(
+            new Request("http://localhost:8787/events/evt-cards-rarity"),
+          );
+          const body = await response.text();
+
+          // Assert
+          expect(body).toContain('class="card-rarity-ur"');
+          expect(body).toContain('class="card-rarity-sr"');
+          expect(body).toContain('class="card-rarity-r"');
+          expect(body).toContain('class="card-rarity-n"');
+        });
+      });
+      describe("カード並び順", () => {
+        // Arrange — 同一イベントに 3 名を順に seed（id 昇順 = 送信順）
+        beforeEach(async () => {
+          const seeded = await seedEvent({
+            id: "evt-cards-order",
+            title: "新年会",
+            options: ["2026-01-10 19:00"],
+          });
+          const [opt] = seeded.optionIds;
+          const participants: Array<{ name: string; title: string }> = [
+            { name: "Aさん", title: "二つ名Aさん固有" },
+            { name: "Bさん", title: "二つ名Bさん固有" },
+            { name: "Cさん", title: "二つ名Cさん固有" },
+          ];
+          for (const p of participants) {
+            const { responseId } = await seedResponse({
+              eventId: "evt-cards-order",
+              name: p.name,
+              answers: [{ optionId: opt!, answer: "○" }],
+            });
+            await database.insert(schema.participantCards).values({
+              responseId,
+              title: p.title,
+              rarity: "N",
+              attribute: "火",
+              race: "戦士",
+              flavor: "テストフレーバー",
+              attack: 1000,
+              defense: 800,
+              tier: "default",
+            });
+          }
+        });
+
+        it("カードは回答送信順（古い→新しい、event_responses.id 昇順）でカルーセル内に並ぶ", async () => {
+          // Act
+          const response = await localApp.fetch(
+            new Request("http://localhost:8787/events/evt-cards-order"),
+          );
+          const body = await response.text();
+
+          // Assert — body 中で A → B → C の順に出現する
+          const idxA = body.indexOf("二つ名Aさん固有");
+          const idxB = body.indexOf("二つ名Bさん固有");
+          const idxC = body.indexOf("二つ名Cさん固有");
+          expect(idxA).toBeGreaterThanOrEqual(0);
+          expect(idxB).toBeGreaterThan(idxA);
+          expect(idxC).toBeGreaterThan(idxB);
+        });
+      });
+      describe("aria-label（スクリーンリーダー対応）", () => {
+        // Arrange — イベント・候補・参加者 1 名・participant_cards 1 件を seed
+        beforeEach(async () => {
+          const seeded = await seedEvent({
+            id: "evt-cards-aria",
+            title: "新年会",
+            options: ["2026-01-10 19:00"],
+          });
+          const [opt] = seeded.optionIds;
+          const { responseId } = await seedResponse({
+            eventId: "evt-cards-aria",
+            name: "山田太郎",
+            answers: [{ optionId: opt!, answer: "○" }],
+          });
+          await database.insert(schema.participantCards).values({
+            responseId,
+            title: "輝ける戦士 山田太郎",
+            rarity: "R",
+            attribute: "火",
+            race: "戦士",
+            flavor: "テストフレーバー",
+            attack: 1000,
+            defense: 800,
+            tier: "default",
+          });
+        });
+
+        it("各カードに『二つ名 + 参加者名』を含む aria-label が付与される", async () => {
+          // Act
+          const response = await localApp.fetch(
+            new Request("http://localhost:8787/events/evt-cards-aria"),
+          );
+          const body = await response.text();
+
+          // Assert — aria-label 属性が存在し、その値に二つ名（参加者名を含む）が含まれる
+          expect(body).toMatch(/aria-label="[^"]*輝ける戦士 山田太郎[^"]*"/);
+        });
+      });
+      describe("回答が 0 件のとき", () => {
+        // Arrange — event + 候補のみ seed（参加者 0 名）
+        beforeEach(async () => {
+          await seedEvent({
+            id: "evt-cards-empty",
+            title: "新年会",
+            options: ["2026-01-10 19:00"],
+          });
+        });
+
+        it('回答が 0 件のとき、カード（class="card-rarity-..."）はひとつも描画されない', async () => {
+          // Act
+          const response = await localApp.fetch(
+            new Request("http://localhost:8787/events/evt-cards-empty"),
+          );
+          const body = await response.text();
+
+          // Assert — 0 件のとき responses.map が空配列となり、card-rarity- クラスは描画されない
+          const cardCount = (body.match(/class="card-rarity-/g) ?? []).length;
+          expect(cardCount).toBe(0);
+        });
+      });
+      describe("ATK / DEF の数値", () => {
+        // Arrange — イベント・候補・参加者 1 名・participant_cards 1 件を seed
+        beforeEach(async () => {
+          const seeded = await seedEvent({
+            id: "evt-cards-atk-def",
+            title: "新年会",
+            options: ["2026-01-10 19:00"],
+          });
+          const [opt] = seeded.optionIds;
+          const { responseId } = await seedResponse({
+            eventId: "evt-cards-atk-def",
+            name: "山田太郎",
+            answers: [{ optionId: opt!, answer: "○" }],
+          });
+          await database.insert(schema.participantCards).values({
+            responseId,
+            title: "輝ける戦士 山田太郎",
+            rarity: "R",
+            attribute: "火",
+            race: "戦士",
+            flavor: "テストフレーバー",
+            attack: 2500,
+            defense: 2100,
+            tier: "default",
+          });
+        });
+
+        it("ATK / DEF の数値がカード内に描画される", async () => {
+          // Act
+          const response = await localApp.fetch(
+            new Request("http://localhost:8787/events/evt-cards-atk-def"),
+          );
+          const body = await response.text();
+
+          // Assert — ATK / DEF ラベルと attack / defense の数値が body に含まれる
+          expect(body).toContain("ATK");
+          expect(body).toContain("DEF");
+          expect(body).toContain("2500");
+          expect(body).toContain("2100");
+        });
+      });
+      describe("回答に紐づく card が null のとき", () => {
+        // Arrange — event + 候補 + 参加者 1 名のみ seed する。participant_cards は INSERT しない（card === null の状態）
+        beforeEach(async () => {
+          const seeded = await seedEvent({
+            id: "evt-cards-null",
+            title: "新年会",
+            options: ["2026-01-10 19:00"],
+          });
+          const [opt] = seeded.optionIds;
+          await seedResponse({
+            eventId: "evt-cards-null",
+            name: "テスト参加者",
+            answers: [{ optionId: opt!, answer: "○" }],
+          });
+        });
+
+        it("回答に紐づく card が null のとき、カード本体の代わりにフォールバック表示が描画される", async () => {
+          // Act
+          const response = await localApp.fetch(
+            new Request("http://localhost:8787/events/evt-cards-null"),
+          );
+          const body = await response.text();
+
+          // Assert — design.md 推奨の「カードを生成中…」表記、または「カード生成中」のいずれかが含まれる
+          const hasFallback = body.includes("カードを生成中") || body.includes("カード生成中");
+          expect(hasFallback).toBe(true);
+        });
       });
     });
 
@@ -2425,6 +2799,307 @@ describe("routes (Hono sub-app) mounted on app", () => {
         expect(optionResponses.length).toBe(0);
       });
     });
+
+    /**
+     * Task 3.1: 参加者カードとの連動（Card Service + OOB フラグメント）
+     *
+     * 検証対象（要件 1.1, 2.4, 5.4, 6.1, 6.2）:
+     *  - 新規回答送信成功時、Card Service（`cards.ts` の `cardService.generateAndPersist`）が呼ばれ、
+     *    `participant_cards` に当該 response に紐づくカードが 1 件作成される（要件 1.1, 5.4）
+     *  - レスポンス本文に既存 `#responses` フラグメントと、`#cards` を `hx-swap-oob` で
+     *    同時更新するフラグメントの両方が含まれる（要件 2.4, 6.1, 6.2）
+     *  - `#cards` フラグメントには新規生成された参加者の二つ名（カード title）が含まれる
+     *  - 404 / 422 の異常系では `participant_cards` に副作用が発生しない
+     *
+     * 設計の前提:
+     *  - プロセス外依存（Gemini API）は `setCardGeneratorForTest(stub)` で完全に差し替える
+     *    （古典派 TDD のプロセス外依存モック方針）。各テストの `beforeEach` で stub を注入し、
+     *    `__resetQuotaForTest()` を呼んでクォータ枯渇フラグもリセットする
+     *  - `addResponseWithCard` は `src/db.ts` に既に実装済み（同一トランザクション書き込み）
+     *  - 既存 `#responses` フラグメントの返却挙動（上の正常系 describe）は無改変
+     *
+     * 備考:
+     *  - 既存 `beforeEach` には `participantCards` テーブルの truncate が含まれていない。
+     *    本 describe のテストを成立させるには Phase 2 で truncate に participantCards を追加する必要がある
+     *    （子テーブルから順に削除する規約に従い、最初の `delete` の前に追加する）
+     */
+    describe("参加者カードとの連動（Task 3.1）", () => {
+      // 古典派 TDD: プロセス外依存（Gemini API）のみ stub に差し替える。
+      // DB は実体（in-memory SQLite）を使い、participant_cards も子テーブルとして
+      // 各ケース前に truncate する（既存 beforeEach には含まれていないためここで明示）。
+      beforeEach(async () => {
+        await database.delete(schema.participantCards);
+
+        const { setCardGeneratorForTest, __resetQuotaForTest } = await import("./gemini");
+        __resetQuotaForTest();
+        setCardGeneratorForTest({
+          generate: async (name) => ({
+            title: "テスト二つ名 " + name,
+            rarity: "R",
+            attribute: "火",
+            race: "戦士",
+            flavor: "テストフレーバー",
+            attack: 1000,
+            defense: 800,
+          }),
+          verifyConnectivity: async () => ({ ok: true }),
+        });
+      });
+
+      afterEach(async () => {
+        const { setCardGeneratorForTest } = await import("./gemini");
+        setCardGeneratorForTest(null);
+      });
+
+      it("正常系: POST 成功時に participant_cards に当該 response に紐づくカードが 1 件作成される", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-card-link-200",
+          title: "新年会",
+          options: ["2026-01-10 19:00"],
+        });
+        const [opt] = seeded.optionIds;
+
+        // Act
+        const response = await localApp.fetch(
+          buildResponseRequest("evt-card-link-200", [
+            ["name", "山田太郎"],
+            [`answers[${opt}]`, "○"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(200);
+        const responses = await database.select().from(schema.eventResponses);
+        expect(responses.length).toBe(1);
+        const cards = await database.select().from(schema.participantCards);
+        expect(cards.length).toBe(1);
+        expect(cards[0]!.responseId).toBe(responses[0]!.id);
+      });
+
+      it("正常系: POST 成功時に作成された participant_cards.title には参加者名（送信した name）が部分文字列として含まれる", async () => {
+        // Arrange
+        // stub（上位 beforeEach で配線済み）は `title: "テスト二つ名 " + name` を返す。
+        // POST 成功時に作られる participant_cards の title に、送信した name が
+        // String#includes として含まれることだけを検証する（具体的な接頭辞や書式は
+        // 実装の詳細に踏み込まないように避ける）。
+        const participantName = "山田太郎";
+        const seeded = await seedEvent({
+          id: "evt-card-link-title-includes",
+          title: "新年会",
+          options: ["2026-01-10 19:00"],
+        });
+        const [opt] = seeded.optionIds;
+
+        // Act
+        const response = await localApp.fetch(
+          buildResponseRequest("evt-card-link-title-includes", [
+            ["name", participantName],
+            [`answers[${opt}]`, "○"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(200);
+        const cards = await database.select().from(schema.participantCards);
+        expect(cards.length).toBe(1);
+        expect(cards[0]!.title.includes(participantName)).toBe(true);
+      });
+
+      it("正常系: POST 成功時の participant_cards.response_id は作成された event_responses.id と一致する（1:1 紐付け）", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-card-link-fk",
+          title: "新年会",
+          options: ["2026-01-10 19:00"],
+        });
+        const [opt] = seeded.optionIds;
+
+        // Act
+        const response = await localApp.fetch(
+          buildResponseRequest("evt-card-link-fk", [
+            ["name", "山田太郎"],
+            [`answers[${opt}]`, "○"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(200);
+        const responses = await database.select().from(schema.eventResponses);
+        const cards = await database.select().from(schema.participantCards);
+        expect(responses.length).toBe(1);
+        expect(cards.length).toBe(1);
+        expect(cards[0]!.responseId).toBe(responses[0]!.id);
+      });
+
+      it("正常系: レスポンス本文に既存の `#responses` フラグメントと `#cards` の OOB フラグメント（`hx-swap-oob`）が両方含まれる", async () => {
+        // Arrange
+        const seeded = await seedEvent({
+          id: "evt-card-link-oob",
+          title: "新年会",
+          options: ["2026-01-10 19:00"],
+        });
+        const [opt] = seeded.optionIds;
+
+        // Act
+        const response = await localApp.fetch(
+          buildResponseRequest("evt-card-link-oob", [
+            ["name", "山田太郎"],
+            [`answers[${opt}]`, "○"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(200);
+        const body = await response.text();
+        expect(body).toContain(`id="responses"`);
+        expect(body).toContain(`id="cards"`);
+        expect(body).toContain("hx-swap-oob");
+      });
+
+      it("正常系: `#cards` の OOB フラグメントには新規生成された参加者カードの二つ名（title）が含まれる", async () => {
+        // Arrange
+        // stub（beforeEach で配線済み）は `title: "テスト二つ名 " + name` を返す。
+        // 参加者名 "山田太郎" を送ると、stub が返す title は "テスト二つ名 山田太郎" となる。
+        // この文字列が `#cards` OOB フラグメント（= POST 成功時のレスポンス本文）に含まれることを検証する。
+        const seeded = await seedEvent({
+          id: "evt-card-link-title",
+          title: "新年会",
+          options: ["2026-01-10 19:00"],
+        });
+        const [opt] = seeded.optionIds;
+
+        // Act
+        const response = await localApp.fetch(
+          buildResponseRequest("evt-card-link-title", [
+            ["name", "山田太郎"],
+            [`answers[${opt}]`, "○"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(200);
+        const body = await response.text();
+        expect(body).toContain("テスト二つ名 山田太郎");
+      });
+
+      it("正常系: 既存参加者が居るイベントに新規回答を送ると、`#cards` フラグメントに既存カードと新規カードの両方が含まれる（カルーセル全置換 = OOB 全更新）", async () => {
+        // Arrange
+        // 既存参加者 1 名とそのカードを直接 INSERT で作っておく。
+        // stub（beforeEach で配線済み）は `title: "テスト二つ名 " + name` を返すため、
+        // 既存カードは stub の挙動と同じ書式の title を採用し、新規分との見分けを参加者名で行う。
+        const seeded = await seedEvent({
+          id: "evt-card-link-both",
+          title: "新年会",
+          options: ["2026-01-10 19:00"],
+        });
+        const [opt] = seeded.optionIds;
+
+        const [existingResp] = await database
+          .insert(schema.eventResponses)
+          .values({ eventId: "evt-card-link-both", name: "既存花子" })
+          .returning({ id: schema.eventResponses.id });
+        await database.insert(schema.eventOptionResponses).values({
+          responseId: existingResp!.id,
+          optionId: opt!,
+          answer: "○",
+        });
+        await database.insert(schema.participantCards).values({
+          responseId: existingResp!.id,
+          title: "テスト二つ名 既存花子",
+          rarity: "R",
+          attribute: "水",
+          race: "魔法使い",
+          flavor: "既存フレーバー",
+          attack: 900,
+          defense: 700,
+          tier: "ai",
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          buildResponseRequest("evt-card-link-both", [
+            ["name", "新規太郎"],
+            [`answers[${opt}]`, "△"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(200);
+        const body = await response.text();
+        expect(body).toContain("テスト二つ名 既存花子");
+        expect(body).toContain("テスト二つ名 新規太郎");
+      });
+
+      it("422 のとき participant_cards にレコードは作成されない（バリデーション失敗時に Card Service を呼ばない／副作用なし）", async () => {
+        // Arrange — 候補日時 1 つのイベントを作る。Card Service の stub は上位 beforeEach で配線済み。
+        const seeded = await seedEvent({
+          id: "evt-card-link-422-no-side-effect",
+          title: "新年会",
+          options: ["2026-01-10 19:00"],
+        });
+        const [opt] = seeded.optionIds;
+
+        // Act — name 空文字で 422 を起こす（既存 422 ケースと同じトリガー）
+        const response = await localApp.fetch(
+          buildResponseRequest("evt-card-link-422-no-side-effect", [
+            ["name", ""],
+            [`answers[${opt}]`, "○"],
+          ]),
+        );
+
+        // Assert — 前段で 422 を確認し、event_responses / participant_cards 双方に副作用がないこと
+        expect(response.status).toBe(422);
+        const responses = await database.select().from(schema.eventResponses);
+        expect(responses.length).toBe(0);
+        const cards = await database.select().from(schema.participantCards);
+        expect(cards.length).toBe(0);
+      });
+
+      it("422 のレスポンス本文には `#cards` の OOB フラグメントが含まれない（差し戻しフォームのみを返す）", async () => {
+        // Arrange — 候補日時 1 つのイベントを作る。Card Service の stub は上位 beforeEach で配線済み。
+        const seeded = await seedEvent({
+          id: "evt-card-link-422-no-oob",
+          title: "新年会",
+          options: ["2026-01-10 19:00"],
+        });
+        const [opt] = seeded.optionIds;
+
+        // Act — name 空文字で 422 を起こす（既存 422 ケースと同じトリガー）
+        const response = await localApp.fetch(
+          buildResponseRequest("evt-card-link-422-no-oob", [
+            ["name", ""],
+            [`answers[${opt}]`, "○"],
+          ]),
+        );
+
+        // Assert — 422 を確認した上で、`#cards` の OOB フラグメントが本文に含まれないこと
+        expect(response.status).toBe(422);
+        const body = await response.text();
+        expect(body).not.toContain(`id="cards"`);
+        expect(body).not.toContain("hx-swap-oob");
+      });
+
+      it("404（不在 event ID）のとき participant_cards にレコードは作成されない（副作用なし）", async () => {
+        // Arrange — 何も seed しない（beforeEach で全テーブル truncate 済み）。
+        // Card Service stub は上位 beforeEach で配線済みだが、404 経路では呼ばれない想定。
+
+        // Act
+        const response = await localApp.fetch(
+          buildResponseRequest("non-existent-id", [
+            ["name", "山田太郎"],
+            ["answers[1]", "○"],
+          ]),
+        );
+
+        // Assert — 前段で 404 を確認し、participant_cards / event_responses 双方に副作用がないこと
+        expect(response.status).toBe(404);
+        const cards = await database.select().from(schema.participantCards);
+        expect(cards.length).toBe(0);
+        const responses = await database.select().from(schema.eventResponses);
+        expect(responses.length).toBe(0);
+      });
+    });
   });
 
   /**
@@ -3643,6 +4318,410 @@ describe("routes (Hono sub-app) mounted on app", () => {
         const answerByOption = new Map(rows.map((r) => [r.optionId, r.answer]));
         expect(answerByOption.get(optB1)).toBe("○");
         expect(answerByOption.get(optB2)).toBe("△");
+      });
+    });
+
+    /**
+     * Task 3.1: 参加者カードとの連動（編集経路）
+     *
+     * 検証対象（要件 1.4, 6.1, 6.2, 6.4）:
+     *  - 既存回答の編集（PUT）では Card Service を呼ばず、既存カードを再生成しない（要件 1.4）
+     *  - レスポンス本文に既存 `#responses` フラグメントと、`#cards` の OOB フラグメント（`hx-swap-oob`）が
+     *    両方含まれる（要件 6.1, 6.2）
+     *  - `#cards` フラグメントは「現状の既存カード集合をそのまま再送」する（カード集合が不変）
+     *  - 422 / 404 の異常系でも既存カードは変化しない（副作用なし）
+     *
+     * 設計の前提:
+     *  - 既存カードは DB に直接 INSERT して seed する（PUT は Card Service を呼ばないため、stub 不要）
+     *  - ただし誤って Card Service が呼ばれてしまった場合に実 API を叩かないよう、
+     *    PUT 経路でも `setCardGeneratorForTest(stub)` を `beforeEach` で注入しておく安全策を推奨
+     *  - 「カード不変」は (a) participant_cards の件数が変わらない、(b) 対象 response の card title が
+     *    変わらない、の 2 点で検証する（実装の詳細＝Card Service の呼び出し有無に依存しないアサーション）
+     */
+    describe("参加者カードとの連動（Task 3.1）", () => {
+      // 古典派 TDD: プロセス外依存（Gemini API）のみ stub に差し替える。
+      // PUT 経路では Card Service を呼ばない設計だが、誤って呼ばれた場合に実 API を
+      // 叩かないよう安全策として stub を注入する。
+      // DB は実体（in-memory SQLite）を使い、participant_cards も子テーブルとして
+      // 各ケース前に truncate する（既存 beforeEach には含まれていないためここで明示）。
+      beforeEach(async () => {
+        await database.delete(schema.participantCards);
+
+        const { setCardGeneratorForTest, __resetQuotaForTest } = await import("./gemini");
+        __resetQuotaForTest();
+        setCardGeneratorForTest({
+          generate: async (name) => ({
+            title: "テスト二つ名 " + name,
+            rarity: "R",
+            attribute: "火",
+            race: "戦士",
+            flavor: "テストフレーバー",
+            attack: 1000,
+            defense: 800,
+          }),
+          verifyConnectivity: async () => ({ ok: true }),
+        });
+      });
+
+      afterEach(async () => {
+        const { setCardGeneratorForTest } = await import("./gemini");
+        setCardGeneratorForTest(null);
+      });
+
+      it("正常系: PUT 成功後も participant_cards のレコード件数は変化しない（カード再生成しない）", async () => {
+        // Arrange
+        // 事前に event + 既存参加者 1 名と、その参加者に紐づく participant_cards を 1 件 seed する。
+        // PUT で answers を変更しても participant_cards の件数が 1 件のまま（再生成されない）
+        // ことを検証する（実装の詳細＝Card Service 呼び出しの有無ではなく、最終結果である
+        // テーブル件数で振る舞いを検証する）。
+        const seeded = await seedEvent({
+          id: "evt-put-card-count",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-card-count",
+          name: "山田太郎",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+        await database.insert(schema.participantCards).values({
+          responseId,
+          title: "既存二つ名 山田太郎",
+          rarity: "R",
+          attribute: "火",
+          race: "戦士",
+          flavor: "既存フレーバー",
+          attack: 1000,
+          defense: 800,
+          tier: "ai",
+        });
+        const cardsBefore = await database.select().from(schema.participantCards);
+
+        // Act
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-card-count", responseId, [
+            ["name", "山田太郎"],
+            [`answers[${optA}]`, "△"],
+            [`answers[${optB}]`, "○"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(200);
+        const cardsAfter = await database.select().from(schema.participantCards);
+        expect(cardsAfter.length).toBe(cardsBefore.length);
+        expect(cardsAfter.length).toBe(1);
+      });
+
+      it("正常系: PUT 成功後も対象 response に紐づく participant_cards.title は編集前と完全に一致する（カード不変）", async () => {
+        // Arrange
+        // 事前に event + 既存参加者 1 名と、その参加者に紐づく participant_cards を 1 件 seed する。
+        // PUT で answers を変更しても対象 response の participant_cards.title が完全一致のまま
+        // （再生成・更新されない）ことを検証する。実装の詳細（Card Service の呼び出し有無）ではなく、
+        // 最終結果である DB の title 値で振る舞いを検証する。
+        const seeded = await seedEvent({
+          id: "evt-put-card-title",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-card-title",
+          name: "山田太郎",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+        const seededTitle = "既存の固有 title XYZ";
+        await database.insert(schema.participantCards).values({
+          responseId,
+          title: seededTitle,
+          rarity: "R",
+          attribute: "火",
+          race: "戦士",
+          flavor: "既存フレーバー",
+          attack: 1000,
+          defense: 800,
+          tier: "ai",
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-card-title", responseId, [
+            ["name", "山田太郎"],
+            [`answers[${optA}]`, "△"],
+            [`answers[${optB}]`, "○"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(200);
+        const { eq } = await import("drizzle-orm");
+        const [cardAfter] = await database
+          .select()
+          .from(schema.participantCards)
+          .where(eq(schema.participantCards.responseId, responseId));
+        expect(cardAfter?.title).toBe(seededTitle);
+      });
+
+      it("正常系: PUT のレスポンス本文に既存の `#responses` フラグメントと `#cards` の OOB フラグメント（`hx-swap-oob`）が両方含まれる", async () => {
+        // Arrange
+        // 事前に event + 既存参加者 1 名と、その参加者に紐づく participant_cards を 1 件 seed する。
+        // PUT のレスポンス本文に `#responses`（既存）と `#cards`（OOB）の両フラグメントが
+        // 含まれることを、最終結果である本文文字列で検証する（HTMX の OOB 配線は実装の詳細では
+        // なく外部に公開された契約なので、属性名 `hx-swap-oob` の存在を検証する）。
+        const seeded = await seedEvent({
+          id: "evt-put-card-oob",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-card-oob",
+          name: "山田太郎",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+        await database.insert(schema.participantCards).values({
+          responseId,
+          title: "既存二つ名 山田太郎",
+          rarity: "R",
+          attribute: "火",
+          race: "戦士",
+          flavor: "既存フレーバー",
+          attack: 1000,
+          defense: 800,
+          tier: "ai",
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-card-oob", responseId, [
+            ["name", "山田太郎"],
+            [`answers[${optA}]`, "△"],
+            [`answers[${optB}]`, "○"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(200);
+        const body = await response.text();
+        expect(body).toContain(`id="responses"`);
+        expect(body).toContain(`id="cards"`);
+        expect(body).toContain("hx-swap-oob");
+      });
+
+      it("正常系: `#cards` の OOB フラグメントには既存カード集合の二つ名（title）がすべて含まれ、新規 title は含まれない", async () => {
+        // Arrange
+        // 既存カードの title が `#cards` OOB フラグメントに含まれ、かつ
+        // PUT 経路では Card Service を呼ばないため stub の prefix "テスト二つ名"
+        // は本文に出現しないことで「カード再生成しない」契約を最終出力で検証する。
+        const seeded = await seedEvent({
+          id: "evt-put-card-oob-title",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-card-oob-title",
+          name: "山田太郎",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+        await database.insert(schema.participantCards).values({
+          responseId,
+          title: "既存二つ名 山田太郎",
+          rarity: "R",
+          attribute: "火",
+          race: "戦士",
+          flavor: "既存フレーバー",
+          attack: 1000,
+          defense: 800,
+          tier: "ai",
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-card-oob-title", responseId, [
+            ["name", "山田太郎"],
+            [`answers[${optA}]`, "△"],
+            [`answers[${optB}]`, "○"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(200);
+        const body = await response.text();
+        expect(body.includes("既存二つ名 山田太郎")).toBe(true);
+        expect(body.includes("テスト二つ名")).toBe(false);
+      });
+
+      it("正常系: name を変更しても既存カードの title は変化しない（カード再生成しないことの追加検証）", async () => {
+        // Arrange
+        // 事前に event + 既存参加者 1 名（name: "元の名前"）と、その参加者に紐づく
+        // participant_cards を 1 件 seed する。PUT で name を別の値に変更しても、
+        // - DB の participant_cards.title が seed 値のまま（更新されない）
+        // - レスポンス本文に stub の prefix "テスト二つ名" が出現しない（再生成されない）
+        // という最終結果から「name 変更でも既存カードは再生成されない」契約を検証する。
+        const seeded = await seedEvent({
+          id: "evt-put-card-name-change",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-card-name-change",
+          name: "元の名前",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+        const seededTitle = "既存二つ名 元の名前";
+        await database.insert(schema.participantCards).values({
+          responseId,
+          title: seededTitle,
+          rarity: "R",
+          attribute: "火",
+          race: "戦士",
+          flavor: "既存フレーバー",
+          attack: 1000,
+          defense: 800,
+          tier: "ai",
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-card-name-change", responseId, [
+            ["name", "変更後の名前"],
+            [`answers[${optA}]`, "○"],
+            [`answers[${optB}]`, "△"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(200);
+        const { eq } = await import("drizzle-orm");
+        const [cardAfter] = await database
+          .select()
+          .from(schema.participantCards)
+          .where(eq(schema.participantCards.responseId, responseId));
+        expect(cardAfter?.title).toBe(seededTitle);
+        const body = await response.text();
+        expect(body.includes("テスト二つ名")).toBe(false);
+      });
+
+      it("422 のとき participant_cards は更新も追加もされない（件数不変・既存 title 不変）", async () => {
+        // Arrange
+        // 事前に event + 既存参加者 1 名と、その参加者に紐づく participant_cards を 1 件 seed。
+        // PUT で name="" を送ってバリデーション失敗（422）させたとき、
+        // - participant_cards 件数が 1 件のままであること
+        // - 既存 title が seed 値のまま変化しないこと
+        // で「バリデーション失敗時はカード side effect が発生しない」契約を検証する。
+        const seeded = await seedEvent({
+          id: "evt-put-422-card-noop",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-422-card-noop",
+          name: "元の名前",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+        const seededTitle = "既存二つ名 元の名前";
+        await database.insert(schema.participantCards).values({
+          responseId,
+          title: seededTitle,
+          rarity: "R",
+          attribute: "火",
+          race: "戦士",
+          flavor: "既存フレーバー",
+          attack: 1000,
+          defense: 800,
+          tier: "ai",
+        });
+
+        // Act
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-422-card-noop", responseId, [
+            ["name", ""],
+            [`answers[${optA}]`, "○"],
+            [`answers[${optB}]`, "△"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(422);
+        const { eq } = await import("drizzle-orm");
+        const cardsAfter = await database
+          .select()
+          .from(schema.participantCards)
+          .where(eq(schema.participantCards.responseId, responseId));
+        expect(cardsAfter.length).toBe(1);
+        expect(cardsAfter[0]?.title).toBe(seededTitle);
+      });
+
+      it("404（不在 / 不一致）のとき participant_cards は更新も追加もされない（件数不変・既存 title 不変）", async () => {
+        // Arrange
+        // 事前に event + 既存参加者 1 名と、その参加者に紐づく participant_cards を 1 件 seed。
+        // PUT で不在の responseId(999999) を指定して 404 にしたとき、
+        // - participant_cards 件数が 1 件のままであること
+        // - 既存 title が seed 値のまま変化しないこと
+        // で「不在 / 不一致時はカード side effect が発生しない」契約を検証する。
+        const seeded = await seedEvent({
+          id: "evt-put-404-card-noop",
+          title: "新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+        });
+        const [optA, optB] = seeded.optionIds;
+        const responseId = await seedResponse({
+          eventId: "evt-put-404-card-noop",
+          name: "ABC",
+          answers: [
+            { optionId: optA, answer: "○" },
+            { optionId: optB, answer: "△" },
+          ],
+        });
+        const seededTitle = "既存二つ名 ABC";
+        await database.insert(schema.participantCards).values({
+          responseId,
+          title: seededTitle,
+          rarity: "R",
+          attribute: "火",
+          race: "戦士",
+          flavor: "既存フレーバー",
+          attack: 1000,
+          defense: 800,
+          tier: "ai",
+        });
+
+        // Act — 不在の responseId(999999) に対して PUT
+        const response = await localApp.fetch(
+          buildPutRequest("evt-put-404-card-noop", 999999, [
+            ["name", "変更後の名前"],
+            [`answers[${optA}]`, "△"],
+            [`answers[${optB}]`, "○"],
+          ]),
+        );
+
+        // Assert
+        expect(response.status).toBe(404);
+        const cardsAfter = await database.select().from(schema.participantCards);
+        expect(cardsAfter.length).toBe(1);
+        expect(cardsAfter[0]?.title).toBe(seededTitle);
       });
     });
   });
