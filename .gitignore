@@ -6,4 +6,5 @@ test-e2e.db
 test-e2e.db-journal
 playwright-report/
 test-results/
+.playwright-mcp/
 *.log

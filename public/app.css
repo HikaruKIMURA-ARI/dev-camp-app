@@ -232,3 +232,55 @@
   text-align: center;
   padding: 1rem;
 }
+
+/* --- カスタム設問関連 ------------------------------------------------------ */
+/* イベント作成画面で fieldset 内の input をやや詰めて表示する */
+fieldset > small {
+  display: block;
+  color: var(--pico-muted-color);
+  margin-bottom: 0.5rem;
+}
+
+/* 設問削除ボタンが ✕ だけだとタップ領域が小さくなりがちなため最小幅を確保 */
+fieldset [role="group"] > button[aria-label="設問を削除"],
+fieldset [role="group"] > button[aria-label="削除"] {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+}
+
+/* 回答テーブルの hidden 列が <th>/<td> の最低幅で隙間を作らないようにする */
+table th[hidden],
+table td[hidden] {
+  display: none !important;
+}
+
+/* 回答テーブル: 名前列・操作列・候補日時列が縦書きにならないよう nowrap。
+   設問列はヘッダー側で text-overflow:ellipsis を効かせるため上書きしない。 */
+#responses table th:first-child,
+#responses table td:first-child,
+#responses table th:last-child,
+#responses table td:last-child {
+  white-space: nowrap;
+}
+
+/* 候補日時列（候補数分）は日時表現を 1 行で表示する */
+#responses table thead tr th {
+  white-space: nowrap;
+}
+#responses table thead tr th[style*="ellipsis"] {
+  /* 省略表示する設問ヘッダーは個別の inline style を尊重する */
+  white-space: nowrap;
+}
+
+/* 編集モード（tr 内に展開される回答フォーム）の fieldset > label を縦並びにする */
+#responses table td fieldset > label {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+#responses table td fieldset > label:last-child {
+  margin-bottom: 0;
+}
+/* 編集モード時の form は table cell 内に閉じ込められるため width を確保 */
+#responses table td > form {
+  width: 100%;
+}

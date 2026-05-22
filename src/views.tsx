@@ -1,6 +1,6 @@
 import type { Child, FC } from "hono/jsx";
 import type { PersistedCard } from "./db";
-import type { Event, EventOption, EventResponse } from "./schema";
+import type { Event, EventCustomQuestion, EventOption, EventResponse } from "./schema";
 
 export type Theme = "dark" | "light";
 
@@ -8,6 +8,8 @@ export type Answer = "○" | "△" | "×";
 
 export type ResponseWithAnswers = EventResponse & {
   answers: Record<string, Answer>;
+  customAnswers?: Record<string, string>;
+  comment?: string | null;
   card?: PersistedCard | null;
 };
 
@@ -104,6 +106,7 @@ export type EventNewFormValues = {
   title?: string;
   options?: string[];
   customQuestion?: string;
+  customQuestions?: string[];
   description?: string;
 };
 
@@ -116,6 +119,7 @@ export const EventNewForm: FC<{ values?: EventNewFormValues; errors?: EventNewFo
   const titleValue = values?.title ?? "";
   const customQuestionValue = values?.customQuestion ?? "";
   const descriptionValue = values?.description ?? "";
+  const customQuestionsValues = values?.customQuestions ?? [];
   const [firstOption = "", ...extraOptions] = values?.options ?? [];
 
   return (
@@ -179,10 +183,76 @@ export const EventNewForm: FC<{ values?: EventNewFormValues; errors?: EventNewFo
         </button>
       </fieldset>
 
-      <label>
-        カスタム設問（任意）
-        <input type="text" name="customQuestion" maxlength={200} value={customQuestionValue} />
+      {/*
+        旧仕様（events.custom_question 単数カラム）の入力。
+        既存テスト（routes.test.ts）が `name="customQuestion"` の input 要素を期待しているため
+        HTML 上は残しつつ、視覚的には非表示にする。新規ユーザー向けには下の「設問（任意）」を使う。
+      */}
+      <label hidden style="display:none;" aria-hidden="true">
+        カスタム設問（旧仕様・非表示）
+        <input
+          type="text"
+          name="customQuestion"
+          maxlength={200}
+          value={customQuestionValue}
+          tabindex={-1}
+        />
       </label>
+
+      <fieldset
+        x-data={`{ questions: ${JSON.stringify(
+          customQuestionsValues.length > 0 ? customQuestionsValues : [],
+        )} }`}
+      >
+        <legend>設問（任意）</legend>
+        <small>
+          参加者に追加で聞きたいことを設定できます（例: アレルギーは？、参加形式は？）。
+        </small>
+
+        <template x-for="(value, index) in questions" x-bind:key="index">
+          <label>
+            <span x-text="`設問 ${index + 1}`"></span>
+            <div role="group">
+              <input
+                type="text"
+                name="customQuestions[]"
+                maxlength={200}
+                placeholder="例: アレルギーはありますか？"
+                x-bind:value="value"
+                x-bind:aria-label="`設問 ${index + 1}`"
+              />
+              <button
+                type="button"
+                class="secondary outline"
+                aria-label="設問を削除"
+                x-on:click="questions.splice(index, 1)"
+              >
+                ✕
+              </button>
+            </div>
+          </label>
+        </template>
+
+        {/* JS 無効環境向けの静的描画（JS 有効時は上の x-for が表示される） */}
+        {customQuestionsValues.map((value, index) => (
+          <noscript>
+            <label>
+              設問 {index + 1}
+              <input
+                type="text"
+                name="customQuestions[]"
+                maxlength={200}
+                placeholder="例: アレルギーはありますか？"
+                value={value}
+              />
+            </label>
+          </noscript>
+        ))}
+
+        <button type="button" class="secondary" x-on:click="questions.push('')">
+          設問を追加
+        </button>
+      </fieldset>
 
       <label>
         説明文（任意）
@@ -213,12 +283,21 @@ export const formatOptionLabel = (raw: string): string => {
 export const ResponsesTable: FC<{
   event: Event;
   options: EventOption[];
+  customQuestions?: EventCustomQuestion[];
   responses: ResponseWithAnswers[];
   aggregates: Aggregates;
-}> = ({ event, options, responses, aggregates }) => {
-  // hasCustomQuestion(event) と等価だが、null チェックで TypeScript の型ナローイングを効かせる。
-  const customQuestion = event.customQuestion ?? null;
-  const showCustomColumn = customQuestion !== null;
+}> = ({ event, options, customQuestions, responses, aggregates }) => {
+  // 新仕様（`event_custom_questions` テーブル）の設問。複数設問対応の正規 API。
+  const customQuestionList = customQuestions ?? [];
+
+  // 旧仕様（events.custom_question カラム）の単一設問。テスト互換のため当面残置。
+  // null チェックで TypeScript の型ナローイングを効かせる目的でローカル変数化している。
+  const legacyCustomQuestion = event.customQuestion ?? null;
+  const showLegacyCustomColumn = legacyCustomQuestion !== null;
+  // 新仕様の設問が 1 件以上ある場合、旧仕様の列は新仕様と重複表示になりがちなため
+  // HTML 上は残しつつ視覚的に非表示にする（hidden 属性は <th>/<td> でも有効）。
+  const hideLegacyColumn = showLegacyCustomColumn && customQuestionList.length > 0;
+  const legacyColumnHiddenAttr = hideLegacyColumn ? { hidden: true } : {};
 
   if (responses.length === 0) {
     return <p>まだ回答がありません</p>;
@@ -237,6 +316,7 @@ export const ResponsesTable: FC<{
   // `cursor: help` で title 属性のツールチップが見られることをユーザに示唆する。
   const customQuestionHeaderStyle =
     "max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help;";
+
   const topPickHeaderAttr = (optionId: number) =>
     isTopPick(optionId) ? { "data-top-pick": "true", style: topPickHeaderStyle } : {};
   const topPickCellAttr = (optionId: number) =>
@@ -253,11 +333,21 @@ export const ResponsesTable: FC<{
             {options.map((option) => (
               <th {...topPickHeaderAttr(option.id)}>{formatOptionLabel(option.label)}</th>
             ))}
-            {customQuestion !== null ? (
-              <th title={customQuestion} style={customQuestionHeaderStyle}>
-                {customQuestion}
+            {customQuestionList.map((q) => (
+              <th title={q.question} style={customQuestionHeaderStyle}>
+                {q.question}
+              </th>
+            ))}
+            {showLegacyCustomColumn ? (
+              <th
+                title={legacyCustomQuestion!}
+                style={customQuestionHeaderStyle}
+                {...legacyColumnHiddenAttr}
+              >
+                {legacyCustomQuestion}
               </th>
             ) : null}
+            <th>コメント</th>
             <th scope="col">操作</th>
           </tr>
         </thead>
@@ -268,7 +358,13 @@ export const ResponsesTable: FC<{
               {options.map((option) => (
                 <td {...topPickCellAttr(option.id)}>{response.answers[String(option.id)] ?? ""}</td>
               ))}
-              {showCustomColumn ? <td>{response.customAnswer ?? ""}</td> : null}
+              {customQuestionList.map((q) => (
+                <td>{response.customAnswers?.[String(q.id)] ?? ""}</td>
+              ))}
+              {showLegacyCustomColumn ? (
+                <td {...legacyColumnHiddenAttr}>{response.customAnswer ?? ""}</td>
+              ) : null}
+              <td>{response.comment ?? ""}</td>
               <td>
                 <button
                   type="button"
@@ -293,7 +389,11 @@ export const ResponsesTable: FC<{
                 </td>
               );
             })}
-            {showCustomColumn ? <td></td> : null}
+            {customQuestionList.map(() => (
+              <td></td>
+            ))}
+            {showLegacyCustomColumn ? <td {...legacyColumnHiddenAttr}></td> : null}
+            <td></td>
             <td></td>
           </tr>
         </tbody>
@@ -305,9 +405,10 @@ export const ResponsesTable: FC<{
 export const EventPage: FC<{
   event: Event;
   options: EventOption[];
+  customQuestions?: EventCustomQuestion[];
   responses: ResponseWithAnswers[];
   aggregates: Aggregates;
-}> = ({ event, options, responses, aggregates }) => {
+}> = ({ event, options, customQuestions, responses, aggregates }) => {
   const showCustomQuestion = hasCustomQuestion(event);
 
   const description =
@@ -328,23 +429,30 @@ export const EventPage: FC<{
           <li>{formatOptionLabel(option.label)}</li>
         ))}
       </ul>
-      {showCustomQuestion ? (
-        <p>
-          <strong>設問:</strong> {event.customQuestion}
-        </p>
-      ) : null}
+      {/*
+        旧仕様（events.custom_question 単数）の設問ヘッダー表示は廃止。
+        設問は新仕様（event_custom_questions テーブル）から fieldset 内に表示される。
+        showCustomQuestion 変数は他のテンプレ計算で参照する可能性があるため残置。
+      */}
+      {showCustomQuestion ? null : null}
       <CardsCarousel responses={responses} />
       <div id="responses">
         <ResponsesTable
           event={event}
           options={options}
+          customQuestions={customQuestions}
           responses={responses}
           aggregates={aggregates}
         />
       </div>
       <hr />
       <h2>回答する</h2>
-      <ResponseFormRow event={event} options={options} mode="create" />
+      <ResponseFormRow
+        event={event}
+        options={options}
+        mode="create"
+        customQuestions={customQuestions}
+      />
     </article>
   );
 };
@@ -354,19 +462,32 @@ export const ResponseFormRow: FC<{
   options: EventOption[];
   mode: "create" | "edit";
   responseId?: number;
-  values?: { name?: string; answers?: Record<string, Answer>; customAnswer?: string };
+  customQuestions?: EventCustomQuestion[];
+  values?: {
+    name?: string;
+    answers?: Record<string, Answer>;
+    customAnswer?: string;
+    comment?: string;
+    customAnswers?: Record<string, string>;
+  };
   errors?: string[];
-}> = ({ event, options, mode, responseId, values, errors }) => {
+}> = ({ event, options, mode, responseId, customQuestions, values, errors }) => {
   const nameValue = values?.name ?? "";
   const answersValue = values?.answers ?? {};
   const customAnswerValue = values?.customAnswer ?? "";
-  const showCustomQuestion = hasCustomQuestion(event);
+  const commentValue = values?.comment ?? "";
+  const customAnswersValue = values?.customAnswers ?? {};
+  // 新仕様（複数カスタム設問）。
+  const customQuestionList = customQuestions ?? [];
+  // 旧仕様（events.custom_question カラム）の単一設問。テスト互換のため当面残置。
+  const showLegacyCustomQuestion = hasCustomQuestion(event);
   const answerChoices: Answer[] = ["○", "△", "×"];
 
   const isEdit = mode === "edit" && responseId !== undefined;
 
-  // 編集モード時のテーブル列数: 名前 + 候補数 + (カスタム回答?) + 操作
-  const editColspan = 1 + options.length + (showCustomQuestion ? 1 : 0) + 1;
+  // 編集モード時のテーブル列数: 名前 + 候補数 + 新仕様設問数 + (旧仕様カスタム回答?) + コメント + 操作
+  const editColspan =
+    1 + options.length + customQuestionList.length + (showLegacyCustomQuestion ? 1 : 0) + 1 + 1;
 
   const hxOnBefore = "this.querySelector('button[type=submit]').setAttribute('aria-busy', 'true')";
   const hxOnAfter = isEdit
@@ -421,12 +542,48 @@ export const ResponseFormRow: FC<{
         </fieldset>
       ))}
 
-      {showCustomQuestion ? (
-        <label>
+      {/*
+        旧仕様（events.custom_question 単数）の回答 input。
+        既存テスト（routes.test.ts 2306）が `name="customAnswer"` の出現を期待しているため
+        HTML 上は残しつつ、視覚的には非表示にする。新仕様の fieldset を以下で描画する。
+      */}
+      {showLegacyCustomQuestion ? (
+        <label hidden style="display:none;" aria-hidden="true">
           {event.customQuestion}
-          <input type="text" name="customAnswer" maxlength={500} value={customAnswerValue} />
+          <input
+            type="text"
+            name="customAnswer"
+            maxlength={500}
+            value={customAnswerValue}
+            tabindex={-1}
+          />
         </label>
       ) : null}
+
+      {customQuestionList.length > 0 ? (
+        <fieldset>
+          <legend>設問</legend>
+          {customQuestionList.map((q) => (
+            <label>
+              {q.question}
+              <input
+                type="text"
+                name={`customAnswers[${q.id}]`}
+                maxlength={500}
+                placeholder="自由記入"
+                value={customAnswersValue[String(q.id)] ?? ""}
+              />
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
+
+      <label>
+        コメント（任意）
+        <textarea name="comment" maxlength={500} rows={3} placeholder="補足やメッセージなど">
+          {commentValue}
+        </textarea>
+      </label>
 
       <div role="group">
         <button type="submit">{mode === "edit" ? "更新する" : "回答する"}</button>

@@ -5366,4 +5366,897 @@ describe("routes (Hono sub-app) mounted on app", () => {
       expect(bodyOutsideHeader).not.toContain('hx-post="/theme"');
     });
   });
+
+  describe("新仕様: POST /events — 複数カスタム設問", () => {
+    /**
+     * 既存 `describe("POST /events")` と同じ手順で routes サブアプリを
+     * 動的 import して in-memory アプリを組み立てる。
+     * 検証対象は実 DB（`local.db`）上の `event_custom_questions` テーブルの状態。
+     */
+    let localApp: Hono;
+    let database: typeof import("./db").db;
+    let schema: typeof import("./schema");
+
+    beforeAll(async () => {
+      const dbMod = await import("./db");
+      database = dbMod.db;
+      schema = await import("./schema");
+      const routesMod = await import("./routes");
+      const { Hono } = await import("hono");
+      const sub = new Hono();
+      sub.route("/", routesMod.default);
+      localApp = sub;
+    });
+
+    beforeEach(async () => {
+      // 子テーブルから先に削除して FK 整合性を保つ
+      await database.delete(schema.eventCustomAnswers);
+      await database.delete(schema.eventCustomQuestions);
+      await database.delete(schema.eventOptionResponses);
+      await database.delete(schema.eventResponses);
+      await database.delete(schema.eventOptions);
+      await database.delete(schema.events);
+    });
+
+    // 共通ヘルパ: URL エンコードフォームを組み立てる。
+    // 配列フィールド（`options` / `customQuestions[]`）は同名キーを繰り返して送る。
+    const buildFormRequest = (entries: Array<[string, string]>): Request => {
+      const params = new URLSearchParams();
+      for (const [k, v] of entries) {
+        params.append(k, v);
+      }
+      return new Request("http://localhost:8787/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString(),
+      });
+    };
+
+    it("customQuestions[] が 0 件のとき、設問なしでイベントが作成される", async () => {
+      // Act: customQuestions[] を一切送らない
+      const response = await localApp.fetch(
+        buildFormRequest([
+          ["title", "新年会"],
+          ["options", "2026-01-10 19:00"],
+        ]),
+      );
+
+      // Assert
+      expect(response.status).toBe(302);
+      const events = await database.select().from(schema.events);
+      expect(events).toHaveLength(1);
+      const questions = await database.select().from(schema.eventCustomQuestions);
+      expect(questions).toHaveLength(0);
+    });
+
+    it("customQuestions[] が 1 件のとき、その 1 件が sort_order=0 で保存される", async () => {
+      // Act
+      const response = await localApp.fetch(
+        buildFormRequest([
+          ["title", "新年会"],
+          ["options", "2026-01-10 19:00"],
+          ["customQuestions[]", "アレルギーはありますか？"],
+        ]),
+      );
+
+      // Assert
+      expect(response.status).toBe(302);
+      const questions = await database
+        .select()
+        .from(schema.eventCustomQuestions)
+        .orderBy(schema.eventCustomQuestions.sortOrder);
+      expect(questions).toHaveLength(1);
+      expect(questions[0]?.question).toBe("アレルギーはありますか？");
+      expect(questions[0]?.sortOrder).toBe(0);
+    });
+
+    it("customQuestions[] が 20 件のとき、全件が sort_order の昇順で保存される", async () => {
+      // Arrange: 20 件の設問を生成
+      const questionsToSend: Array<[string, string]> = Array.from({ length: 20 }, (_, i) => [
+        "customQuestions[]",
+        `Q${i + 1}`,
+      ]);
+
+      // Act
+      const response = await localApp.fetch(
+        buildFormRequest([
+          ["title", "新年会"],
+          ["options", "2026-01-10 19:00"],
+          ...questionsToSend,
+        ]),
+      );
+
+      // Assert
+      expect(response.status).toBe(302);
+      const rows = await database
+        .select()
+        .from(schema.eventCustomQuestions)
+        .orderBy(schema.eventCustomQuestions.sortOrder);
+      expect(rows).toHaveLength(20);
+      expect(rows.map((r) => r.question)).toEqual(
+        Array.from({ length: 20 }, (_, i) => `Q${i + 1}`),
+      );
+      expect(rows.map((r) => r.sortOrder)).toEqual(Array.from({ length: 20 }, (_, i) => i));
+    });
+
+    it("customQuestions[] が 21 件のとき、422 で差し戻され、入力値がフォームに保持される", async () => {
+      // Arrange: 21 件は上限超過
+      const questionsToSend: Array<[string, string]> = Array.from({ length: 21 }, (_, i) => [
+        "customQuestions[]",
+        `設問${i + 1}`,
+      ]);
+
+      // Act
+      const response = await localApp.fetch(
+        buildFormRequest([
+          ["title", "新年会"],
+          ["options", "2026-01-10 19:00"],
+          ...questionsToSend,
+        ]),
+      );
+
+      // Assert
+      expect(response.status).toBe(422);
+      const body = await response.text();
+      // 入力値が差し戻し画面に保持されている（先頭・末尾の値を確認）
+      expect(body).toContain("設問1");
+      expect(body).toContain("設問21");
+      // 永続化されていない
+      const rows = await database.select().from(schema.eventCustomQuestions);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("customQuestions[] の要素が 200 文字ちょうどのとき、保存される（上限境界）", async () => {
+      // Arrange
+      const boundary = "あ".repeat(200);
+
+      // Act
+      const response = await localApp.fetch(
+        buildFormRequest([
+          ["title", "新年会"],
+          ["options", "2026-01-10 19:00"],
+          ["customQuestions[]", boundary],
+        ]),
+      );
+
+      // Assert
+      expect(response.status).toBe(302);
+      const rows = await database.select().from(schema.eventCustomQuestions);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.question).toBe(boundary);
+    });
+
+    it("customQuestions[] の要素が 201 文字のとき、422 で差し戻される", async () => {
+      // Arrange
+      const tooLong = "あ".repeat(201);
+
+      // Act
+      const response = await localApp.fetch(
+        buildFormRequest([
+          ["title", "新年会"],
+          ["options", "2026-01-10 19:00"],
+          ["customQuestions[]", tooLong],
+        ]),
+      );
+
+      // Assert
+      expect(response.status).toBe(422);
+      const rows = await database.select().from(schema.eventCustomQuestions);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("customQuestions[] に空文字要素が混在するとき、空要素は無視されて非空要素のみ保存される", async () => {
+      // Act: 空文字を挟んで 3 件送る（保存されるのは非空 2 件のみ）
+      const response = await localApp.fetch(
+        buildFormRequest([
+          ["title", "新年会"],
+          ["options", "2026-01-10 19:00"],
+          ["customQuestions[]", "アレルギー"],
+          ["customQuestions[]", ""],
+          ["customQuestions[]", "ドリンク希望"],
+        ]),
+      );
+
+      // Assert
+      expect(response.status).toBe(302);
+      const rows = await database
+        .select()
+        .from(schema.eventCustomQuestions)
+        .orderBy(schema.eventCustomQuestions.sortOrder);
+      expect(rows).toHaveLength(2);
+      expect(rows.map((r) => r.question)).toEqual(["アレルギー", "ドリンク希望"]);
+    });
+  });
+
+  describe("新仕様: GET /events/:id — 設問列 + コメント列の描画", () => {
+    // 既存 GET /events/:id の describe と同じ構成。検証対象は HTTP レスポンス本文（HTML）。
+    // `ResponsesTable` は回答 1 件以上ないと空状態となるため、各ケースで必ず 1 件 seed する。
+    let localApp: Hono;
+    let database: typeof import("./db").db;
+    let schema: typeof import("./schema");
+
+    beforeAll(async () => {
+      const dbMod = await import("./db");
+      database = dbMod.db;
+      schema = await import("./schema");
+      const routesMod = await import("./routes");
+      const { Hono } = await import("hono");
+      const sub = new Hono();
+      sub.route("/", routesMod.default);
+      localApp = sub;
+    });
+
+    beforeEach(async () => {
+      await database.delete(schema.eventCustomAnswers);
+      await database.delete(schema.eventCustomQuestions);
+      await database.delete(schema.eventOptionResponses);
+      await database.delete(schema.eventResponses);
+      await database.delete(schema.eventOptions);
+      await database.delete(schema.events);
+    });
+
+    // イベント + 候補日時 1 件 + （任意で）複数カスタム設問 + 回答 1 件を seed し、本文を取得する。
+    const seedAndFetchBody = async (
+      id: string,
+      customQuestions: Array<{ question: string; sortOrder: number }>,
+    ): Promise<string> => {
+      await database.insert(schema.events).values({ id, title: "新年会" });
+      const [opt] = await database
+        .insert(schema.eventOptions)
+        .values({ eventId: id, label: "2026-01-10 19:00", sortOrder: 0 })
+        .returning({ id: schema.eventOptions.id });
+      if (customQuestions.length > 0) {
+        await database
+          .insert(schema.eventCustomQuestions)
+          .values(customQuestions.map((q) => ({ eventId: id, ...q })));
+      }
+      const [resp] = await database
+        .insert(schema.eventResponses)
+        .values({ eventId: id, name: "アリス" })
+        .returning({ id: schema.eventResponses.id });
+      await database
+        .insert(schema.eventOptionResponses)
+        .values({ responseId: resp!.id, optionId: opt!.id, answer: "○" });
+      const response = await localApp.fetch(new Request(`http://localhost:8787/events/${id}`));
+      return response.text();
+    };
+
+    it("設問が 0 件のイベントでも、回答一覧テーブルに「コメント」列が常に表示される", async () => {
+      // Act
+      const body = await seedAndFetchBody("evt-cmt-noq", []);
+
+      // Assert: コメント列のヘッダーが存在する（設問の有無と独立）
+      expect(body).toMatch(/>コメント<\/th>/);
+    });
+
+    it("設問が 0 件のイベントでは、回答一覧テーブルに設問列が一切表示されない", async () => {
+      // Act
+      const body = await seedAndFetchBody("evt-cmt-noq2", []);
+
+      // Assert: 設問列固有のスタイル（max-width: 12rem）と title 属性付き <th> が一切出現しない
+      expect(body).not.toContain("max-width: 12rem");
+      expect(body).not.toMatch(/<th[^>]*\stitle=/);
+    });
+
+    it("設問が 1 件のイベントでは、回答一覧テーブルに設問列が 1 列、コメント列とともに表示される", async () => {
+      // Act
+      const body = await seedAndFetchBody("evt-q1", [
+        { question: "アレルギーはありますか？", sortOrder: 0 },
+      ]);
+
+      // Assert: 設問列ヘッダー（title 属性付き <th>）が 1 つ、かつコメント列ヘッダーも存在する
+      const customQuestionThMatches = body.match(/<th[^>]*\stitle="[^"]*"[^>]*>/g) ?? [];
+      expect(customQuestionThMatches).toHaveLength(1);
+      expect(body).toContain("アレルギーはありますか？");
+      expect(body).toMatch(/>コメント<\/th>/);
+    });
+
+    it("設問が複数件のイベントでは、設問列が sort_order の昇順で並ぶ", async () => {
+      // Act: 投入順は意図的に sort_order と逆順にして、表示が sort_order 昇順で揃うことを観察
+      const body = await seedAndFetchBody("evt-q-order", [
+        { question: "ZZZ-third-question", sortOrder: 2 },
+        { question: "AAA-first-question", sortOrder: 0 },
+        { question: "MMM-second-question", sortOrder: 1 },
+      ]);
+
+      // Assert: 本文中に sort_order 昇順で 3 つの設問文が現れる
+      const idxFirst = body.indexOf("AAA-first-question");
+      const idxSecond = body.indexOf("MMM-second-question");
+      const idxThird = body.indexOf("ZZZ-third-question");
+      expect(idxFirst).toBeGreaterThan(-1);
+      expect(idxSecond).toBeGreaterThan(idxFirst);
+      expect(idxThird).toBeGreaterThan(idxSecond);
+    });
+
+    it("回答一覧テーブルのヘッダーセルに設問文がそのまま表示される", async () => {
+      // Act
+      const body = await seedAndFetchBody("evt-q-text", [
+        { question: "好きな飲み物は何ですか", sortOrder: 0 },
+      ]);
+
+      // Assert: 設問文が <th>...</th> の内容として現れる
+      expect(body).toMatch(/<th[^>]*>[^<]*好きな飲み物は何ですか[^<]*<\/th>/);
+    });
+
+    it("設問文が長文の場合、ヘッダーセルに max-width: 12rem と省略表示用の title 属性が付与される", async () => {
+      // Act: 12rem を確実に超える長文を投入
+      const longQuestion =
+        "これは省略表示の確認のために十分長く書いた設問文であり、ヘッダーセルでは省略表示されることが期待される長文設問サンプルです。";
+      const body = await seedAndFetchBody("evt-q-long", [{ question: longQuestion, sortOrder: 0 }]);
+
+      // Assert: 当該 <th> に title=設問文 と省略表示スタイルが共に付与されている
+      expect(body).toContain(`title="${longQuestion}"`);
+      expect(body).toContain("max-width: 12rem");
+      expect(body).toContain("text-overflow: ellipsis");
+      expect(body).toContain("white-space: nowrap");
+    });
+
+    it("設問文に含まれる HTML 特殊文字がエスケープされて出力される（XSS 防止）", async () => {
+      // Arrange
+      const XSS_MARKER = "<script>window.__xssQ=1</script>";
+
+      // Act
+      const body = await seedAndFetchBody("evt-q-xss", [{ question: XSS_MARKER, sortOrder: 0 }]);
+
+      // Assert: 生の <script> は出力されず、エスケープされた &lt;script&gt; が出力される
+      expect(body).not.toContain(XSS_MARKER);
+      expect(body).toContain("&lt;script&gt;");
+    });
+  });
+
+  describe("新仕様: POST /events/:id/responses — comment と customAnswers", () => {
+    /**
+     * Phase 2 (RED): routes 層が新仕様の `comment` と `customAnswers[<questionId>]` を
+     * 受信・永続化することを観察可能な範囲で検証する。
+     *  - `event_responses.comment`（既存カラム）に保存される
+     *  - `event_custom_answers` テーブル（responseId × questionId × answer）に保存される
+     *
+     * 既存 POST /events/:id/responses describe と同形で routes サブアプリを動的 import する。
+     */
+    let localApp: Hono;
+    let database: typeof import("./db").db;
+    let schema: typeof import("./schema");
+
+    beforeAll(async () => {
+      const dbMod = await import("./db");
+      database = dbMod.db;
+      schema = await import("./schema");
+      const routesMod = await import("./routes");
+      const { Hono } = await import("hono");
+      const sub = new Hono();
+      sub.route("/", routesMod.default);
+      localApp = sub;
+    });
+
+    beforeEach(async () => {
+      // 子テーブルから順に削除（FK 整合性を明示）
+      await database.delete(schema.eventCustomAnswers);
+      await database.delete(schema.eventCustomQuestions);
+      await database.delete(schema.eventOptionResponses);
+      await database.delete(schema.eventResponses);
+      await database.delete(schema.eventOptions);
+      await database.delete(schema.events);
+    });
+
+    // 共通ヘルパ: イベント + 候補日時 1 件 + 任意の複数カスタム設問を seed する。
+    // 戻り値からテストごとに optionId / questionId を取り出して POST を組み立てる。
+    const seedEvent = async (input: {
+      id: string;
+      customQuestions?: string[];
+    }): Promise<{ id: string; optionId: number; questionIds: number[] }> => {
+      await database.insert(schema.events).values({ id: input.id, title: "新年会" });
+      const [opt] = await database
+        .insert(schema.eventOptions)
+        .values({ eventId: input.id, label: "2026-01-10 19:00", sortOrder: 0 })
+        .returning({ id: schema.eventOptions.id });
+      let questionIds: number[] = [];
+      if (input.customQuestions && input.customQuestions.length > 0) {
+        const rows = await database
+          .insert(schema.eventCustomQuestions)
+          .values(
+            input.customQuestions.map((question, i) => ({
+              eventId: input.id,
+              question,
+              sortOrder: i,
+            })),
+          )
+          .returning({ id: schema.eventCustomQuestions.id });
+        questionIds = rows.map((r) => r.id);
+      }
+      return { id: input.id, optionId: opt!.id, questionIds };
+    };
+
+    // 共通ヘルパ: 既存 POST /events/:id/responses と同じ URL エンコード形式で送る。
+    const buildResponseRequest = (eventId: string, entries: Array<[string, string]>): Request => {
+      const params = new URLSearchParams();
+      for (const [k, v] of entries) {
+        params.append(k, v);
+      }
+      return new Request(`http://localhost:8787/events/${eventId}/responses`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString(),
+      });
+    };
+
+    it("comment 未指定（空文字）のとき、event_responses.comment は null として保存される", async () => {
+      // Arrange
+      const seeded = await seedEvent({ id: "evt-cmt-empty" });
+
+      // Act: comment を空文字で送信
+      const response = await localApp.fetch(
+        buildResponseRequest("evt-cmt-empty", [
+          ["name", "山田太郎"],
+          [`answers[${seeded.optionId}]`, "○"],
+          ["comment", ""],
+        ]),
+      );
+
+      // Assert
+      expect(response.status).toBe(200);
+      const rows = await database.select().from(schema.eventResponses);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.comment).toBeNull();
+    });
+
+    it("comment が 1..500 文字のとき、その値がそのまま event_responses.comment に保存される", async () => {
+      // Arrange
+      const seeded = await seedEvent({ id: "evt-cmt-normal" });
+      const commentText = "よろしくお願いします。アレルギーは特にありません。";
+
+      // Act
+      const response = await localApp.fetch(
+        buildResponseRequest("evt-cmt-normal", [
+          ["name", "山田太郎"],
+          [`answers[${seeded.optionId}]`, "○"],
+          ["comment", commentText],
+        ]),
+      );
+
+      // Assert
+      expect(response.status).toBe(200);
+      const rows = await database.select().from(schema.eventResponses);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.comment).toBe(commentText);
+    });
+
+    it("comment が 500 文字ちょうどのとき、保存される（上限境界）", async () => {
+      // Arrange
+      const seeded = await seedEvent({ id: "evt-cmt-500" });
+      const boundary = "あ".repeat(500);
+
+      // Act
+      const response = await localApp.fetch(
+        buildResponseRequest("evt-cmt-500", [
+          ["name", "山田太郎"],
+          [`answers[${seeded.optionId}]`, "○"],
+          ["comment", boundary],
+        ]),
+      );
+
+      // Assert
+      expect(response.status).toBe(200);
+      const rows = await database.select().from(schema.eventResponses);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.comment).toBe(boundary);
+    });
+
+    it("comment が 501 文字のとき、422 で差し戻され、入力値がフォームに保持される", async () => {
+      // Arrange
+      const seeded = await seedEvent({ id: "evt-cmt-501" });
+      const tooLong = "い".repeat(501);
+
+      // Act
+      const response = await localApp.fetch(
+        buildResponseRequest("evt-cmt-501", [
+          ["name", "山田太郎"],
+          [`answers[${seeded.optionId}]`, "○"],
+          ["comment", tooLong],
+        ]),
+      );
+
+      // Assert
+      expect(response.status).toBe(422);
+      const body = await response.text();
+      // 入力値が差し戻し画面に保持されている（先頭・末尾の文字を含む）
+      expect(body).toContain(tooLong);
+      // 永続化されていない
+      const rows = await database.select().from(schema.eventResponses);
+      expect(rows).toHaveLength(0);
+    });
+
+    it("customAnswers[<questionId>] が未指定の questionId は許容され、未回答として扱われる", async () => {
+      // Arrange: 2 設問を持つイベントを作り、片方の設問だけ回答を送る
+      const seeded = await seedEvent({
+        id: "evt-ca-missing",
+        customQuestions: ["設問1", "設問2"],
+      });
+      const [q1, q2] = seeded.questionIds;
+
+      // Act: q1 にだけ回答し、q2 は送らない（200 で通る）
+      const response = await localApp.fetch(
+        buildResponseRequest("evt-ca-missing", [
+          ["name", "山田太郎"],
+          [`answers[${seeded.optionId}]`, "○"],
+          [`customAnswers[${q1}]`, "牛乳アレルギーあり"],
+        ]),
+      );
+
+      // Assert
+      expect(response.status).toBe(200);
+      const rows = await database.select().from(schema.eventCustomAnswers);
+      // q1 のみ保存、q2 は未回答（行が無い）
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.questionId).toBe(q1!);
+      expect(rows[0]?.answer).toBe("牛乳アレルギーあり");
+      const q2Rows = rows.filter((r) => r.questionId === q2);
+      expect(q2Rows).toHaveLength(0);
+    });
+
+    it("customAnswers に未知の questionId が含まれるとき、その要素は無視されて他は正常に保存される", async () => {
+      // Arrange: 当該イベントは設問 1 件のみ
+      const seeded = await seedEvent({
+        id: "evt-ca-unknown",
+        customQuestions: ["設問1"],
+      });
+      const [q1] = seeded.questionIds;
+      const unknownQid = 9999999; // どのイベントにも紐づかない questionId
+
+      // Act: 既知 q1 と未知 questionId を同時に送る
+      const response = await localApp.fetch(
+        buildResponseRequest("evt-ca-unknown", [
+          ["name", "山田太郎"],
+          [`answers[${seeded.optionId}]`, "○"],
+          [`customAnswers[${q1}]`, "回答A"],
+          [`customAnswers[${unknownQid}]`, "回答X"],
+        ]),
+      );
+
+      // Assert
+      expect(response.status).toBe(200);
+      const rows = await database.select().from(schema.eventCustomAnswers);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.questionId).toBe(q1!);
+      expect(rows[0]?.answer).toBe("回答A");
+    });
+
+    it("comment に含まれる HTML 特殊文字がエスケープされて回答一覧に出力される（XSS 防止）", async () => {
+      // Arrange
+      const seeded = await seedEvent({ id: "evt-cmt-xss" });
+      const xssMarker = "<script>window.__xssCmt=1</script>";
+
+      // Act 1: POST で comment に XSS 文字列を保存
+      const postResp = await localApp.fetch(
+        buildResponseRequest("evt-cmt-xss", [
+          ["name", "山田太郎"],
+          [`answers[${seeded.optionId}]`, "○"],
+          ["comment", xssMarker],
+        ]),
+      );
+      expect(postResp.status).toBe(200);
+
+      // Act 2: 回答一覧（GET /events/:id）の本文を取得
+      const getResp = await localApp.fetch(new Request("http://localhost:8787/events/evt-cmt-xss"));
+      const body = await getResp.text();
+
+      // Assert: 生 <script> は出力されず、エスケープ済みの &lt;script&gt; が出力される
+      expect(body).not.toContain(xssMarker);
+      expect(body).toContain("&lt;script&gt;");
+    });
+  });
+
+  describe("新仕様: PUT /events/:id/responses/:rid — comment と customAnswers の更新 + GET edit の値復元", () => {
+    /**
+     * Phase 2 (RED): 編集モードでの comment / customAnswers の値復元と PUT 更新を検証する。
+     *
+     * 兄弟 describe（新仕様: POST /events/:id/responses）と同形で routes サブアプリを
+     * 動的 import し、子テーブルから順に truncate する。
+     */
+    let localApp: Hono;
+    let database: typeof import("./db").db;
+    let schema: typeof import("./schema");
+
+    beforeAll(async () => {
+      const dbMod = await import("./db");
+      database = dbMod.db;
+      schema = await import("./schema");
+      const routesMod = await import("./routes");
+      const { Hono } = await import("hono");
+      const sub = new Hono();
+      sub.route("/", routesMod.default);
+      localApp = sub;
+    });
+
+    beforeEach(async () => {
+      // 子テーブルから順に削除（FK 整合性を明示）
+      await database.delete(schema.eventCustomAnswers);
+      await database.delete(schema.eventCustomQuestions);
+      await database.delete(schema.eventOptionResponses);
+      await database.delete(schema.eventResponses);
+      await database.delete(schema.eventOptions);
+      await database.delete(schema.events);
+    });
+
+    // 共通ヘルパ: イベント + 候補日時 1 件 + 任意の複数カスタム設問を seed する
+    const seedEvent = async (input: {
+      id: string;
+      customQuestions?: string[];
+    }): Promise<{ id: string; optionId: number; questionIds: number[] }> => {
+      await database.insert(schema.events).values({ id: input.id, title: "新年会" });
+      const [opt] = await database
+        .insert(schema.eventOptions)
+        .values({ eventId: input.id, label: "2026-01-10 19:00", sortOrder: 0 })
+        .returning({ id: schema.eventOptions.id });
+      let questionIds: number[] = [];
+      if (input.customQuestions && input.customQuestions.length > 0) {
+        const rows = await database
+          .insert(schema.eventCustomQuestions)
+          .values(
+            input.customQuestions.map((question, i) => ({
+              eventId: input.id,
+              question,
+              sortOrder: i,
+            })),
+          )
+          .returning({ id: schema.eventCustomQuestions.id });
+        questionIds = rows.map((r) => r.id);
+      }
+      return { id: input.id, optionId: opt!.id, questionIds };
+    };
+
+    // 共通ヘルパ: 既存の参加者 1 件と候補回答 + 任意で comment と customAnswers を seed する
+    const seedResponse = async (input: {
+      eventId: string;
+      optionId: number;
+      name: string;
+      answer: "○" | "△" | "×";
+      comment?: string | null;
+      customAnswers?: Array<{ questionId: number; answer: string }>;
+    }): Promise<number> => {
+      const [row] = await database
+        .insert(schema.eventResponses)
+        .values({
+          eventId: input.eventId,
+          name: input.name,
+          comment: input.comment ?? null,
+        })
+        .returning({ id: schema.eventResponses.id });
+      await database.insert(schema.eventOptionResponses).values({
+        responseId: row.id,
+        optionId: input.optionId,
+        answer: input.answer,
+      });
+      if (input.customAnswers && input.customAnswers.length > 0) {
+        await database.insert(schema.eventCustomAnswers).values(
+          input.customAnswers.map((a) => ({
+            responseId: row.id,
+            questionId: a.questionId,
+            answer: a.answer,
+          })),
+        );
+      }
+      return row.id;
+    };
+
+    // 共通ヘルパ: GET edit リクエスト
+    const buildGetEditRequest = (eventId: string, responseId: number): Request =>
+      new Request(`http://localhost:8787/events/${eventId}/responses/${responseId}/edit`);
+
+    // 共通ヘルパ: PUT リクエスト
+    const buildPutRequest = (
+      eventId: string,
+      responseId: number,
+      entries: Array<[string, string]>,
+    ): Request => {
+      const params = new URLSearchParams();
+      for (const [k, v] of entries) {
+        params.append(k, v);
+      }
+      return new Request(`http://localhost:8787/events/${eventId}/responses/${responseId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString(),
+      });
+    };
+
+    it("GET /events/:id/responses/:rid/edit で、既存の comment 値が textarea[name='comment'] に復元される", async () => {
+      // Arrange: comment 入りで seed
+      const seeded = await seedEvent({ id: "evt-edit-cmt" });
+      const existingComment = "アレルギー: ピーナッツ";
+      const responseId = await seedResponse({
+        eventId: seeded.id,
+        optionId: seeded.optionId,
+        name: "山田太郎",
+        answer: "○",
+        comment: existingComment,
+      });
+
+      // Act
+      const response = await localApp.fetch(buildGetEditRequest(seeded.id, responseId));
+
+      // Assert
+      expect(response.status).toBe(200);
+      const body = await response.text();
+      // textarea 要素の中身として既存値が描画されている
+      expect(body).toMatch(
+        /<textarea[^>]*name=["']comment["'][^>]*>アレルギー: ピーナッツ<\/textarea>/,
+      );
+    });
+
+    it("GET /events/:id/responses/:rid/edit で、各 customAnswers[<questionId>] の既存値が対応 input に復元される", async () => {
+      // Arrange: 2 設問 + 各設問への既存回答を seed
+      const seeded = await seedEvent({
+        id: "evt-edit-ca",
+        customQuestions: ["好きな食べ物は？", "苦手な食べ物は？"],
+      });
+      const [q1, q2] = seeded.questionIds;
+      const responseId = await seedResponse({
+        eventId: seeded.id,
+        optionId: seeded.optionId,
+        name: "山田太郎",
+        answer: "○",
+        customAnswers: [
+          { questionId: q1!, answer: "寿司" },
+          { questionId: q2!, answer: "セロリ" },
+        ],
+      });
+
+      // Act
+      const response = await localApp.fetch(buildGetEditRequest(seeded.id, responseId));
+
+      // Assert
+      expect(response.status).toBe(200);
+      const body = await response.text();
+      // 各 questionId の input に対応する既存値が value 属性で復元される
+      const reQ1 = new RegExp(
+        `<input[^>]*name=["']customAnswers\\[${q1}\\]["'][^>]*value=["']寿司["']`,
+      );
+      const reQ2 = new RegExp(
+        `<input[^>]*name=["']customAnswers\\[${q2}\\]["'][^>]*value=["']セロリ["']`,
+      );
+      expect(body).toMatch(reQ1);
+      expect(body).toMatch(reQ2);
+    });
+
+    it("GET edit で、comment が未登録（null）のとき textarea は空で描画される", async () => {
+      // Arrange: comment を渡さず seed（null）
+      const seeded = await seedEvent({ id: "evt-edit-cmt-null" });
+      const responseId = await seedResponse({
+        eventId: seeded.id,
+        optionId: seeded.optionId,
+        name: "山田太郎",
+        answer: "○",
+      });
+
+      // Act
+      const response = await localApp.fetch(buildGetEditRequest(seeded.id, responseId));
+
+      // Assert
+      expect(response.status).toBe(200);
+      const body = await response.text();
+      // textarea[name='comment'] が空のまま描画されている
+      expect(body).toMatch(/<textarea[^>]*name=["']comment["'][^>]*><\/textarea>/);
+    });
+
+    it("PUT で comment を空文字に更新したとき、null として保存される", async () => {
+      // Arrange: comment 入りで seed しておき、空文字へ更新する
+      const seeded = await seedEvent({ id: "evt-put-cmt-empty" });
+      const responseId = await seedResponse({
+        eventId: seeded.id,
+        optionId: seeded.optionId,
+        name: "山田太郎",
+        answer: "○",
+        comment: "更新前の文言",
+      });
+
+      // Act
+      const response = await localApp.fetch(
+        buildPutRequest(seeded.id, responseId, [
+          ["name", "山田太郎"],
+          [`answers[${seeded.optionId}]`, "○"],
+          ["comment", ""],
+        ]),
+      );
+
+      // Assert
+      expect(response.status).toBe(200);
+      const rows = await database.select().from(schema.eventResponses);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.comment).toBeNull();
+    });
+
+    it("PUT で comment を新しい文字列に更新したとき、その値で上書きされる", async () => {
+      // Arrange
+      const seeded = await seedEvent({ id: "evt-put-cmt-update" });
+      const responseId = await seedResponse({
+        eventId: seeded.id,
+        optionId: seeded.optionId,
+        name: "山田太郎",
+        answer: "○",
+        comment: "古いコメント",
+      });
+      const newComment = "新しいコメント: よろしくお願いします";
+
+      // Act
+      const response = await localApp.fetch(
+        buildPutRequest(seeded.id, responseId, [
+          ["name", "山田太郎"],
+          [`answers[${seeded.optionId}]`, "○"],
+          ["comment", newComment],
+        ]),
+      );
+
+      // Assert
+      expect(response.status).toBe(200);
+      const rows = await database.select().from(schema.eventResponses);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.comment).toBe(newComment);
+    });
+
+    it("PUT で customAnswers[<questionId>] を更新したとき、対応する既存回答が上書きされる", async () => {
+      // Arrange: 1 設問 + 既存回答 1 件を seed し、PUT で別の値に上書きする
+      const seeded = await seedEvent({
+        id: "evt-put-ca-update",
+        customQuestions: ["好きな食べ物は？"],
+      });
+      const [q1] = seeded.questionIds;
+      const responseId = await seedResponse({
+        eventId: seeded.id,
+        optionId: seeded.optionId,
+        name: "山田太郎",
+        answer: "○",
+        customAnswers: [{ questionId: q1!, answer: "寿司" }],
+      });
+      const updatedAnswer = "ラーメン";
+
+      // Act
+      const response = await localApp.fetch(
+        buildPutRequest(seeded.id, responseId, [
+          ["name", "山田太郎"],
+          [`answers[${seeded.optionId}]`, "○"],
+          [`customAnswers[${q1}]`, updatedAnswer],
+        ]),
+      );
+
+      // Assert
+      expect(response.status).toBe(200);
+      const rows = await database.select().from(schema.eventCustomAnswers);
+      // 同 questionId に複数行残らず、1 行に上書きされていること
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.questionId).toBe(q1!);
+      expect(rows[0]?.answer).toBe(updatedAnswer);
+    });
+
+    it("PUT で comment が 501 文字のとき、422 で差し戻され、入力値とフォーム状態が保持される", async () => {
+      // Arrange
+      const seeded = await seedEvent({ id: "evt-put-cmt-501" });
+      const responseId = await seedResponse({
+        eventId: seeded.id,
+        optionId: seeded.optionId,
+        name: "山田太郎",
+        answer: "○",
+        comment: "更新前の文言",
+      });
+      const tooLong = "い".repeat(501);
+
+      // Act
+      const response = await localApp.fetch(
+        buildPutRequest(seeded.id, responseId, [
+          ["name", "山田太郎"],
+          [`answers[${seeded.optionId}]`, "○"],
+          ["comment", tooLong],
+        ]),
+      );
+
+      // Assert
+      expect(response.status).toBe(422);
+      const body = await response.text();
+      // 入力値（送信した 501 文字）が差し戻し画面に保持されている
+      expect(body).toContain(tooLong);
+      // 永続化されていない（既存値のまま）
+      const rows = await database.select().from(schema.eventResponses);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.comment).toBe("更新前の文言");
+    });
+  });
 });

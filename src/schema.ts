@@ -33,6 +33,7 @@ export const eventResponses = sqliteTable(
       .references(() => events.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     customAnswer: text("custom_answer"),
+    comment: text("comment"),
     createdAt: text("created_at")
       .notNull()
       .default(sql`(datetime('now'))`),
@@ -67,6 +68,37 @@ export const slackWebhooks = sqliteTable("slack_webhooks", {
     .default(sql`(datetime('now'))`),
 });
 
+export const eventCustomQuestions = sqliteTable(
+  "event_custom_questions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    eventId: text("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    question: text("question").notNull(),
+    sortOrder: integer("sort_order").notNull(),
+  },
+  (table) => [index("event_custom_questions_event_id_idx").on(table.eventId)],
+);
+
+export const eventCustomAnswers = sqliteTable(
+  "event_custom_answers",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    responseId: integer("response_id")
+      .notNull()
+      .references(() => eventResponses.id, { onDelete: "cascade" }),
+    questionId: integer("question_id")
+      .notNull()
+      .references(() => eventCustomQuestions.id, { onDelete: "cascade" }),
+    answer: text("answer").notNull(),
+  },
+  (table) => [
+    index("event_custom_answers_response_id_idx").on(table.responseId),
+    index("event_custom_answers_question_id_idx").on(table.questionId),
+  ],
+);
+
 export const participantCards = sqliteTable("participant_cards", {
   responseId: integer("response_id")
     .primaryKey()
@@ -90,3 +122,5 @@ export type EventResponse = typeof eventResponses.$inferSelect;
 export type EventOptionResponse = typeof eventOptionResponses.$inferSelect;
 export type SlackWebhook = typeof slackWebhooks.$inferSelect;
 export type ParticipantCard = typeof participantCards.$inferSelect;
+export type EventCustomQuestion = typeof eventCustomQuestions.$inferSelect;
+export type EventCustomAnswer = typeof eventCustomAnswers.$inferSelect;

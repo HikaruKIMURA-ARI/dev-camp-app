@@ -45,6 +45,7 @@ const eventCreateSchema = z.object({
     .min(1)
     .refine((arr) => new Set(arr).size === arr.length, "候補日時に重複があります"),
   customQuestion: z.string().max(200).optional(),
+  customQuestions: z.array(z.string().trim().min(1).max(200)).max(20).optional(),
   description: z.string().max(2000).optional(),
 });
 
@@ -54,6 +55,16 @@ const normalizeOptions = (raw: unknown): string[] => {
   return [String(raw)];
 };
 
+// `parseBody({ all: true })` から `customQuestions[]` を文字列配列として取り出す。
+// 文字列値のみを採用（File 等は無視）し、空文字要素は事前に除外する。
+const normalizeCustomQuestions = (raw: unknown): string[] => {
+  const arr = Array.isArray(raw) ? raw : raw === undefined || raw === null ? [] : [raw];
+  return arr
+    .filter((v): v is string => typeof v === "string")
+    .map((v) => v.trim())
+    .filter((v) => v !== "");
+};
+
 routes.post("/events", async (c) => {
   const body = await c.req.parseBody({ all: true });
 
@@ -61,12 +72,14 @@ routes.post("/events", async (c) => {
   const rawOptions = normalizeOptions(body.options);
   const rawCustomQuestion =
     typeof body.customQuestion === "string" ? body.customQuestion : undefined;
+  const rawCustomQuestions = normalizeCustomQuestions(body["customQuestions[]"]);
   const rawDescription = typeof body.description === "string" ? body.description : undefined;
 
   const parsed = eventCreateSchema.safeParse({
     title: rawTitle,
     options: rawOptions,
     customQuestion: rawCustomQuestion,
+    customQuestions: rawCustomQuestions,
     description: rawDescription,
   });
 
@@ -75,6 +88,7 @@ routes.post("/events", async (c) => {
       title: rawTitle,
       options: rawOptions,
       customQuestion: rawCustomQuestion,
+      customQuestions: rawCustomQuestions,
       description: rawDescription,
     };
     const errors = parsed.error.issues.map((issue) => issue.message);
@@ -90,6 +104,7 @@ routes.post("/events", async (c) => {
     parsed.data.customQuestion === undefined || parsed.data.customQuestion.trim() === ""
       ? null
       : parsed.data.customQuestion;
+  const customQuestions = parsed.data.customQuestions ?? [];
   const description =
     parsed.data.description === undefined || parsed.data.description === ""
       ? null
@@ -99,6 +114,7 @@ routes.post("/events", async (c) => {
     title: parsed.data.title,
     options: parsed.data.options,
     customQuestion,
+    customQuestions,
     description,
   });
 
@@ -123,6 +139,7 @@ routes.get("/events/:id", async (c) => {
       <EventPage
         event={data.event}
         options={data.options}
+        customQuestions={data.customQuestions}
         responses={data.responses}
         aggregates={data.aggregates}
       />
@@ -134,6 +151,8 @@ const responseSchema = z.object({
   name: z.string().trim().min(1).max(100),
   answers: z.record(z.string(), z.enum(["○", "△", "×"])),
   customAnswer: z.string().max(500).optional(),
+  comment: z.string().max(500).optional(),
+  customAnswers: z.record(z.string(), z.string()).optional(),
 });
 
 // `parseBody({ all: true })` の戻り値から `answers[<optionId>]` キーを抜き出し、
@@ -149,11 +168,26 @@ const parseAnswersFromBody = (body: Record<string, unknown>): Record<string, str
   return answers;
 };
 
+// `parseBody({ all: true })` から `customAnswers[<questionId>]` キーを抜き出し、
+// `{ <questionId>: <value> }` の形に正規化する。文字列値以外（File 等）は無視する。
+const parseCustomAnswersFromBody = (body: Record<string, unknown>): Record<string, string> => {
+  const customAnswers: Record<string, string> = {};
+  for (const [key, value] of Object.entries(body)) {
+    const match = key.match(/^customAnswers\[(.+)\]$/);
+    if (match && typeof value === "string") {
+      customAnswers[match[1]!] = value;
+    }
+  }
+  return customAnswers;
+};
+
 // 回答送信フォーム（POST 新規 / PUT 編集）の生入力。
 type RawResponseSubmission = {
   name: string;
   customAnswer: string | undefined;
   answers: Record<string, string>;
+  comment: string | undefined;
+  customAnswers: Record<string, string>;
 };
 
 const readResponseSubmission = async (c: Context): Promise<RawResponseSubmission> => {
@@ -162,16 +196,19 @@ const readResponseSubmission = async (c: Context): Promise<RawResponseSubmission
     name: typeof body.name === "string" ? body.name : "",
     customAnswer: typeof body.customAnswer === "string" ? body.customAnswer : undefined,
     answers: parseAnswersFromBody(body),
+    comment: typeof body.comment === "string" ? body.comment : undefined,
+    customAnswers: parseCustomAnswersFromBody(body),
   };
 };
 
-// 422 差し戻し時のレスポンス本文。送信値（name / customAnswer）の文字列保持のみを
+// 422 差し戻し時のレスポンス本文。送信値（name / customAnswer / comment）の文字列保持のみを
 // 観察可能な振る舞いとして担保する最小プレースホルダ。HTML 構造の本格復元は後続タスクで対応する。
 const renderResponseValidationError = (c: Context, raw: RawResponseSubmission) =>
   c.html(
     <div>
       <span>{raw.name}</span>
       <span>{raw.customAnswer ?? ""}</span>
+      <span>{raw.comment ?? ""}</span>
     </div>,
     422,
   );
@@ -182,16 +219,25 @@ const validateResponseSubmission = (
   c: Context,
   raw: RawResponseSubmission,
   validOptionIds: ReadonlySet<string>,
+  validQuestionIds: ReadonlySet<string>,
 ):
   | {
       ok: true;
-      data: { name: string; answers: Record<string, Answer>; customAnswer: string | null };
+      data: {
+        name: string;
+        answers: Record<string, Answer>;
+        customAnswer: string | null;
+        comment: string | null;
+        customAnswers: Record<string, string>;
+      };
     }
   | { ok: false; response: Response | Promise<Response> } => {
   const parsed = responseSchema.safeParse({
     name: raw.name,
     answers: raw.answers,
     customAnswer: raw.customAnswer,
+    comment: raw.comment,
+    customAnswers: raw.customAnswers,
   });
   if (!parsed.success) {
     return { ok: false, response: renderResponseValidationError(c, raw) };
@@ -206,12 +252,22 @@ const validateResponseSubmission = (
     return { ok: false, response: renderResponseValidationError(c, raw) };
   }
 
+  // 未知 questionId は黙って除外（テストが要求する振る舞い）。
+  const filteredCustomAnswers: Record<string, string> = {};
+  for (const [qid, ans] of Object.entries(parsed.data.customAnswers ?? {})) {
+    if (validQuestionIds.has(qid)) {
+      filteredCustomAnswers[qid] = ans;
+    }
+  }
+
   return {
     ok: true,
     data: {
       name: parsed.data.name,
       answers: parsed.data.answers as Record<string, Answer>,
       customAnswer: parsed.data.customAnswer ?? null,
+      comment: parsed.data.comment ?? null,
+      customAnswers: filteredCustomAnswers,
     },
   };
 };
@@ -225,6 +281,7 @@ const renderResponseSubmissionFragment = async (c: Context, eventId: string) => 
         <ResponsesTable
           event={updated.event}
           options={updated.options}
+          customQuestions={updated.customQuestions}
           responses={updated.responses}
           aggregates={updated.aggregates}
         />
@@ -242,7 +299,8 @@ routes.post("/events/:id/responses", async (c) => {
 
   const raw = await readResponseSubmission(c);
   const validOptionIds = new Set(data.options.map((o) => String(o.id)));
-  const validated = validateResponseSubmission(c, raw, validOptionIds);
+  const validQuestionIds = new Set(data.customQuestions.map((q) => String(q.id)));
+  const validated = validateResponseSubmission(c, raw, validOptionIds, validQuestionIds);
   if (!validated.ok) return validated.response;
 
   await cardService.generateAndPersist(id, validated.data);
@@ -269,10 +327,13 @@ routes.get("/events/:id/responses/:responseId/edit", async (c) => {
       options={data.options}
       mode="edit"
       responseId={responseId}
+      customQuestions={data.customQuestions}
       values={{
         name: responseRow.name,
         answers,
         customAnswer: responseRow.customAnswer ?? undefined,
+        comment: responseRow.comment ?? undefined,
+        customAnswers: targetResponse?.customAnswers ?? {},
       }}
     />,
   );
@@ -290,7 +351,8 @@ routes.put("/events/:id/responses/:responseId", async (c) => {
 
   const raw = await readResponseSubmission(c);
   const validOptionIds = new Set(data.options.map((o) => String(o.id)));
-  const validated = validateResponseSubmission(c, raw, validOptionIds);
+  const validQuestionIds = new Set(data.customQuestions.map((q) => String(q.id)));
+  const validated = validateResponseSubmission(c, raw, validOptionIds, validQuestionIds);
   if (!validated.ok) return validated.response;
 
   await updateResponse(eventId, responseId, validated.data);

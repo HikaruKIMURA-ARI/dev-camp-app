@@ -5,6 +5,8 @@ export type ResponseSubmissionInput = {
   name: string;
   answers: Record<string, "○" | "△" | "×">;
   customAnswer: string | null;
+  comment?: string | null;
+  customAnswers?: Record<string, string>;
 };
 
 const TITLE_MAX = 60;

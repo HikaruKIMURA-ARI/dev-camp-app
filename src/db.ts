@@ -4,8 +4,11 @@ import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
 import {
   type Event,
+  type EventCustomQuestion,
   type EventOption,
   type EventResponse,
+  eventCustomAnswers,
+  eventCustomQuestions,
   eventOptionResponses,
   eventOptions,
   eventResponses,
@@ -25,20 +28,39 @@ await migrate(db, { migrationsFolder: "./drizzle" });
 export interface CreateEventInput {
   title: string;
   options: string[];
-  customQuestion: string | null;
+  customQuestion?: string | null;
+  customQuestions?: string[];
   description?: string | null;
 }
 
 export const createEvent = async (input: CreateEventInput): Promise<{ id: string }> => {
   const id = crypto.randomUUID();
 
+  // 新スキーマでは customQuestions: string[] を受け取る。後方互換のため customQuestion: string | null も継続サポート。
+  // 旧 events.custom_question カラムには customQuestions[0] か customQuestion を入れる（カラム削除は後続 Phase）。
+  const customQuestionsList = input.customQuestions ?? [];
+  const legacyCustomQuestion =
+    customQuestionsList.length > 0
+      ? (customQuestionsList[0] ?? null)
+      : (input.customQuestion ?? null);
+
   await db.transaction(async (tx) => {
     await tx.insert(events).values({
       id,
       title: input.title,
-      customQuestion: input.customQuestion,
+      customQuestion: legacyCustomQuestion,
       description: input.description ?? null,
     });
+
+    if (customQuestionsList.length > 0) {
+      await tx.insert(eventCustomQuestions).values(
+        customQuestionsList.map((question, index) => ({
+          eventId: id,
+          question,
+          sortOrder: index,
+        })),
+      );
+    }
 
     await tx.insert(eventOptions).values(
       input.options.map((label, index) => ({
@@ -59,7 +81,15 @@ export type AggregateCounts = { circle: number; triangle: number; cross: number 
 export interface EventWithOptions {
   event: Event;
   options: EventOption[];
-  responses: Array<EventResponse & { answers: Record<string, Answer>; card: PersistedCard | null }>;
+  customQuestions: EventCustomQuestion[];
+  responses: Array<
+    EventResponse & {
+      answers: Record<string, Answer>;
+      customAnswers: Record<string, string>;
+      comment: string | null;
+      card: PersistedCard | null;
+    }
+  >;
   aggregates: Record<string, AggregateCounts>;
 }
 
@@ -78,6 +108,12 @@ export const getEventWithOptions = async (id: string): Promise<EventWithOptions 
     .from(eventOptions)
     .where(eq(eventOptions.eventId, id))
     .orderBy(asc(eventOptions.sortOrder));
+
+  const customQuestions = await db
+    .select()
+    .from(eventCustomQuestions)
+    .where(eq(eventCustomQuestions.eventId, id))
+    .orderBy(asc(eventCustomQuestions.sortOrder));
 
   const responses = await db
     .select()
@@ -116,6 +152,24 @@ export const getEventWithOptions = async (id: string): Promise<EventWithOptions 
     if (agg) agg[ANSWER_TO_AGG_KEY[answer]] += 1;
   }
 
+  const customAnswerRows =
+    responseIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(eventCustomAnswers)
+          .where(inArray(eventCustomAnswers.responseId, responseIds));
+
+  const customAnswersByResponseId = new Map<number, Record<string, string>>();
+  for (const ca of customAnswerRows) {
+    let bucket = customAnswersByResponseId.get(ca.responseId);
+    if (!bucket) {
+      bucket = {};
+      customAnswersByResponseId.set(ca.responseId, bucket);
+    }
+    bucket[String(ca.questionId)] = ca.answer;
+  }
+
   const cardRows =
     responseIds.length === 0
       ? []
@@ -142,16 +196,19 @@ export const getEventWithOptions = async (id: string): Promise<EventWithOptions 
   const responsesWithAnswers = responses.map((response) => ({
     ...response,
     answers: answersByResponseId.get(response.id) ?? {},
+    customAnswers: customAnswersByResponseId.get(response.id) ?? {},
     card: cardsByResponseId.get(response.id) ?? null,
   }));
 
-  return { event, options, responses: responsesWithAnswers, aggregates };
+  return { event, options, customQuestions, responses: responsesWithAnswers, aggregates };
 };
 
 export interface ResponseInput {
   name: string;
   answers: Record<string, Answer>;
   customAnswer?: string | null;
+  customAnswers?: Record<string, string>;
+  comment?: string | null;
 }
 
 export const addResponse = async (
@@ -161,7 +218,12 @@ export const addResponse = async (
   return await db.transaction(async (tx) => {
     const [row] = await tx
       .insert(eventResponses)
-      .values({ eventId, name: input.name, customAnswer: input.customAnswer ?? null })
+      .values({
+        eventId,
+        name: input.name,
+        customAnswer: input.customAnswer ?? null,
+        comment: input.comment === "" ? null : (input.comment ?? null),
+      })
       .returning({ id: eventResponses.id });
     const responseId = row!.id;
 
@@ -171,6 +233,17 @@ export const addResponse = async (
         entries.map(([optionId, answer]) => ({
           responseId,
           optionId: Number(optionId),
+          answer,
+        })),
+      );
+    }
+
+    const customEntries = Object.entries(input.customAnswers ?? {});
+    if (customEntries.length > 0) {
+      await tx.insert(eventCustomAnswers).values(
+        customEntries.map(([questionId, answer]) => ({
+          responseId,
+          questionId: Number(questionId),
           answer,
         })),
       );
@@ -212,6 +285,7 @@ export const addResponseWithCard = async (
         eventId,
         name: input.response.name,
         customAnswer: input.response.customAnswer ?? null,
+        comment: input.response.comment === "" ? null : (input.response.comment ?? null),
       })
       .returning({ id: eventResponses.id });
     const responseId = row!.id;
@@ -222,6 +296,17 @@ export const addResponseWithCard = async (
         entries.map(([optionId, answer]) => ({
           responseId,
           optionId: Number(optionId),
+          answer,
+        })),
+      );
+    }
+
+    const customEntries = Object.entries(input.response.customAnswers ?? {});
+    if (customEntries.length > 0) {
+      await tx.insert(eventCustomAnswers).values(
+        customEntries.map(([questionId, answer]) => ({
+          responseId,
+          questionId: Number(questionId),
           answer,
         })),
       );
@@ -259,7 +344,11 @@ export const updateResponse = async (
   await db.transaction(async (tx) => {
     await tx
       .update(eventResponses)
-      .set({ name: input.name, customAnswer: input.customAnswer ?? null })
+      .set({
+        name: input.name,
+        customAnswer: input.customAnswer ?? null,
+        comment: input.comment === "" ? null : (input.comment ?? null),
+      })
       .where(eq(eventResponses.id, responseId));
 
     await tx.delete(eventOptionResponses).where(eq(eventOptionResponses.responseId, responseId));
@@ -270,6 +359,19 @@ export const updateResponse = async (
         entries.map(([optionId, answer]) => ({
           responseId,
           optionId: Number(optionId),
+          answer,
+        })),
+      );
+    }
+
+    await tx.delete(eventCustomAnswers).where(eq(eventCustomAnswers.responseId, responseId));
+
+    const customEntries = Object.entries(input.customAnswers ?? {});
+    if (customEntries.length > 0) {
+      await tx.insert(eventCustomAnswers).values(
+        customEntries.map(([questionId, answer]) => ({
+          responseId,
+          questionId: Number(questionId),
           answer,
         })),
       );
