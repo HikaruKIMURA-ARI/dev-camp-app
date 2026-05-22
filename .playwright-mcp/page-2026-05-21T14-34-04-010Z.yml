@@ -1,36 +1,36 @@
 - generic [ref=e1]:
-  - banner [ref=e2]:
-    - navigation [ref=e3]:
-      - list [ref=e4]:
-        - listitem [ref=e5]:
-          - strong [ref=e6]: BI調整San
-      - list [ref=e7]:
-        - listitem [ref=e8]:
-          - button "テーマ切り替え" [ref=e9] [cursor=pointer]:
-            - img [ref=e10]
-  - main [ref=e12]:
-    - article [ref=e13]:
-      - heading "勉強会" [level=1] [ref=e14]
-      - list [ref=e15]:
-        - listitem [ref=e16]: 2026/06/01 (月) 19:00
-      - paragraph [ref=e19]: まだ回答がありません
-      - separator [ref=e20]
-      - heading "回答する" [level=2] [ref=e21]
-      - generic [ref=e22]:
-        - generic [ref=e23]:
-          - text: 名前
-          - textbox "名前" [ref=e24]: 田中
-        - group "2026/06/01 (月) 19:00" [ref=e25]:
-          - generic [ref=e26]: 2026/06/01 (月) 19:00
-          - generic [ref=e27]:
-            - generic [ref=e28] [cursor=pointer]:
-              - radio "○" [checked] [active] [ref=e29]
-              - text: ○
-            - generic [ref=e30] [cursor=pointer]:
-              - radio "△" [ref=e31]
-              - text: △
-            - generic [ref=e32] [cursor=pointer]:
-              - radio "×" [ref=e33]
-              - text: ×
-        - group [ref=e34]:
-          - button "回答する" [ref=e35] [cursor=pointer]
+    - banner [ref=e2]:
+        - navigation [ref=e3]:
+            - list [ref=e4]:
+                - listitem [ref=e5]:
+                    - strong [ref=e6]: BI調整San
+            - list [ref=e7]:
+                - listitem [ref=e8]:
+                    - button "テーマ切り替え" [ref=e9] [cursor=pointer]:
+                        - img [ref=e10]
+    - main [ref=e12]:
+        - article [ref=e13]:
+            - heading "勉強会" [level=1] [ref=e14]
+            - list [ref=e15]:
+                - listitem [ref=e16]: 2026/06/01 (月) 19:00
+            - paragraph [ref=e19]: まだ回答がありません
+            - separator [ref=e20]
+            - heading "回答する" [level=2] [ref=e21]
+            - generic [ref=e22]:
+                - generic [ref=e23]:
+                    - text: 名前
+                    - textbox "名前" [ref=e24]: 田中
+                - group "2026/06/01 (月) 19:00" [ref=e25]:
+                    - generic [ref=e26]: 2026/06/01 (月) 19:00
+                    - generic [ref=e27]:
+                        - generic [ref=e28] [cursor=pointer]:
+                            - radio "○" [checked] [active] [ref=e29]
+                            - text: ○
+                        - generic [ref=e30] [cursor=pointer]:
+                            - radio "△" [ref=e31]
+                            - text: △
+                        - generic [ref=e32] [cursor=pointer]:
+                            - radio "×" [ref=e33]
+                            - text: ×
+                - group [ref=e34]:
+                    - button "回答する" [ref=e35] [cursor=pointer]

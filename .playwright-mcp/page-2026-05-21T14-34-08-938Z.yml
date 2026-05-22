@@ -1,65 +1,65 @@
 - generic [active] [ref=e1]:
-  - banner [ref=e2]:
-    - navigation [ref=e3]:
-      - list [ref=e4]:
-        - listitem [ref=e5]:
-          - strong [ref=e6]: BI調整San
-      - list [ref=e7]:
-        - listitem [ref=e8]:
-          - button "テーマ切り替え" [ref=e9] [cursor=pointer]:
-            - img [ref=e10]
-  - main [ref=e12]:
-    - article [ref=e13]:
-      - heading "勉強会" [level=1] [ref=e14]
-      - list [ref=e15]:
-        - listitem [ref=e16]: 2026/06/01 (月) 19:00
-      - article "深淵の集計者 田中" [ref=e37]:
-        - generic [ref=e38]:
-          - strong [ref=e39]: 深淵の集計者 田中
-          - generic [ref=e40]: SR
-        - generic [ref=e41]:
-          - generic [ref=e42]: 闇
-          - generic [ref=e43]: 🔮
-          - generic [ref=e44]: ★★
-        - generic [ref=e45]: "[魔法使い / 闇]"
-        - paragraph [ref=e46]: 膨大なデータを一瞬で見抜き、均衡を保つために影から戦場を支配する計算高き知性体。
-        - generic [ref=e47]:
-          - generic [ref=e48]: ATK2400
-          - generic [ref=e49]: DEF1800
-      - figure [ref=e51]:
-        - table [ref=e52]:
-          - rowgroup [ref=e53]:
-            - row "名前 2026/06/01 (月) 19:00 操作" [ref=e54]:
-              - columnheader "名前" [ref=e55]
-              - columnheader "2026/06/01 (月) 19:00" [ref=e56]
-              - columnheader "操作" [ref=e57]
-          - rowgroup [ref=e58]:
-            - row "田中 ○ 田中 の回答を編集" [ref=e59]:
-              - cell "田中" [ref=e60]
-              - cell "○" [ref=e61]
-              - cell "田中 の回答を編集" [ref=e62]:
-                - button "田中 の回答を編集" [ref=e63] [cursor=pointer]: 編集
-            - row "集計 ○ 1 △ 0 × 0" [ref=e64]:
-              - cell "集計" [ref=e65]
-              - cell "○ 1 △ 0 × 0" [ref=e66]
-              - cell [ref=e67]
-      - separator [ref=e20]
-      - heading "回答する" [level=2] [ref=e21]
-      - generic [ref=e22]:
-        - generic [ref=e23]:
-          - text: 名前
-          - textbox "名前" [ref=e24]
-        - group "2026/06/01 (月) 19:00" [ref=e25]:
-          - generic [ref=e26]: 2026/06/01 (月) 19:00
-          - generic [ref=e27]:
-            - generic [ref=e28] [cursor=pointer]:
-              - radio "○" [ref=e29]
-              - text: ○
-            - generic [ref=e30] [cursor=pointer]:
-              - radio "△" [ref=e31]
-              - text: △
-            - generic [ref=e32] [cursor=pointer]:
-              - radio "×" [ref=e33]
-              - text: ×
-        - group [ref=e34]:
-          - button "回答する" [ref=e35] [cursor=pointer]
+    - banner [ref=e2]:
+        - navigation [ref=e3]:
+            - list [ref=e4]:
+                - listitem [ref=e5]:
+                    - strong [ref=e6]: BI調整San
+            - list [ref=e7]:
+                - listitem [ref=e8]:
+                    - button "テーマ切り替え" [ref=e9] [cursor=pointer]:
+                        - img [ref=e10]
+    - main [ref=e12]:
+        - article [ref=e13]:
+            - heading "勉強会" [level=1] [ref=e14]
+            - list [ref=e15]:
+                - listitem [ref=e16]: 2026/06/01 (月) 19:00
+            - article "深淵の集計者 田中" [ref=e37]:
+                - generic [ref=e38]:
+                    - strong [ref=e39]: 深淵の集計者 田中
+                    - generic [ref=e40]: SR
+                - generic [ref=e41]:
+                    - generic [ref=e42]: 闇
+                    - generic [ref=e43]: 🔮
+                    - generic [ref=e44]: ★★
+                - generic [ref=e45]: "[魔法使い / 闇]"
+                - paragraph [ref=e46]: 膨大なデータを一瞬で見抜き、均衡を保つために影から戦場を支配する計算高き知性体。
+                - generic [ref=e47]:
+                    - generic [ref=e48]: ATK2400
+                    - generic [ref=e49]: DEF1800
+            - figure [ref=e51]:
+                - table [ref=e52]:
+                    - rowgroup [ref=e53]:
+                        - row "名前 2026/06/01 (月) 19:00 操作" [ref=e54]:
+                            - columnheader "名前" [ref=e55]
+                            - columnheader "2026/06/01 (月) 19:00" [ref=e56]
+                            - columnheader "操作" [ref=e57]
+                    - rowgroup [ref=e58]:
+                        - row "田中 ○ 田中 の回答を編集" [ref=e59]:
+                            - cell "田中" [ref=e60]
+                            - cell "○" [ref=e61]
+                            - cell "田中 の回答を編集" [ref=e62]:
+                                - button "田中 の回答を編集" [ref=e63] [cursor=pointer]: 編集
+                        - row "集計 ○ 1 △ 0 × 0" [ref=e64]:
+                            - cell "集計" [ref=e65]
+                            - cell "○ 1 △ 0 × 0" [ref=e66]
+                            - cell [ref=e67]
+            - separator [ref=e20]
+            - heading "回答する" [level=2] [ref=e21]
+            - generic [ref=e22]:
+                - generic [ref=e23]:
+                    - text: 名前
+                    - textbox "名前" [ref=e24]
+                - group "2026/06/01 (月) 19:00" [ref=e25]:
+                    - generic [ref=e26]: 2026/06/01 (月) 19:00
+                    - generic [ref=e27]:
+                        - generic [ref=e28] [cursor=pointer]:
+                            - radio "○" [ref=e29]
+                            - text: ○
+                        - generic [ref=e30] [cursor=pointer]:
+                            - radio "△" [ref=e31]
+                            - text: △
+                        - generic [ref=e32] [cursor=pointer]:
+                            - radio "×" [ref=e33]
+                            - text: ×
+                - group [ref=e34]:
+                    - button "回答する" [ref=e35] [cursor=pointer]

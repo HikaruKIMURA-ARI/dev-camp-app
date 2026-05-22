@@ -20,6 +20,7 @@ export default defineConfig({
     command: `bun run src/index.tsx`,
     env: {
       TURSO_DATABASE_URL: "file:test-e2e.db",
+      GEMINI_API_KEY: "test_api_key",
       PORT: String(PORT),
     },
     url: `${BASE_URL}/`,
