@@ -20,14 +20,15 @@ trigger: implement|add feature|fix bug|create|build|修正|実装|追加|作成|
 
 ## Phase マッピング
 
-| Phase                            | `subagent_type`        | エージェント定義                         | 詳細ルール skill                               |
-| -------------------------------- | ---------------------- | ---------------------------------------- | ---------------------------------------------- |
-| Phase 1: テストケース列挙        | `tdd-test-case-writer` | `.claude/agents/tdd-test-case-writer.md` | `.claude/skills/tdd-test-case-writer/SKILL.md` |
-| Phase 2: RED（テストコード作成） | `tdd-test-code-writer` | `.claude/agents/tdd-test-code-writer.md` | `.claude/skills/tdd-test-code-writer/SKILL.md` |
-| Phase 3: GREEN（最小実装）       | `tdd-implementer`      | `.claude/agents/tdd-implementer.md`      | `.claude/skills/tdd-implementer/SKILL.md`      |
-| Phase 4: REFACTOR（改善）        | `tdd-refactorer`       | `.claude/agents/tdd-refactorer.md`       | `.claude/skills/tdd-refactorer/SKILL.md`       |
+| Phase                            | `subagent_type`          | エージェント定義                           | 詳細ルール skill                                 |
+| -------------------------------- | ------------------------ | ------------------------------------------ | ------------------------------------------------ |
+| Phase 1: テストケース列挙        | `tdd-test-case-writer`   | `.claude/agents/tdd-test-case-writer.md`   | `.claude/skills/tdd-test-case-writer/SKILL.md`   |
+| Phase 2: テストケースレビュー    | `tdd-test-case-reviewer` | `.claude/agents/tdd-test-case-reviewer.md` | `.claude/skills/tdd-test-case-reviewer/SKILL.md` |
+| Phase 3: RED（テストコード作成） | `tdd-test-code-writer`   | `.claude/agents/tdd-test-code-writer.md`   | `.claude/skills/tdd-test-code-writer/SKILL.md`   |
+| Phase 4: GREEN（最小実装）       | `tdd-implementer`        | `.claude/agents/tdd-implementer.md`        | `.claude/skills/tdd-implementer/SKILL.md`        |
+| Phase 5: REFACTOR（改善）        | `tdd-refactorer`         | `.claude/agents/tdd-refactorer.md`         | `.claude/skills/tdd-refactorer/SKILL.md`         |
 
-UI のリファクタリングは Phase 4 で `subagent_type: "ui-optimizer"` を呼び、`.claude/skills/ui-optimization/SKILL.md` に従う（任意）。
+UI のリファクタリングは Phase 5 で `subagent_type: "ui-optimizer"` を呼び、`.claude/skills/ui-optimization/SKILL.md` に従う（任意）。
 
 ## 起動方法（必須）
 
@@ -52,10 +53,11 @@ Agent({
 
 ## 進行ルール
 
-1. **Phase 1** — `subagent_type: "tdd-test-case-writer"` を起動し、テストケースを列挙させる。完了後、ユーザーのレビューゲートを挟む。勝手に Phase 2 へ進まない。
-2. **Phase 2** — `subagent_type: "tdd-test-code-writer"` を起動し、Phase 1 のケースから 1 つ選んで失敗するテストを書かせる。`bun test` で失敗を確認後、ユーザーのレビューゲートを挟む。
-3. **Phase 3** — `subagent_type: "tdd-implementer"` を起動し、テストを通す最小実装を書かせる。`bun test` でパスを確認する。
-4. **Phase 4** — `subagent_type: "tdd-refactorer"` を起動し、テストを保ったままリファクタリングする。UI 変更があれば `subagent_type: "ui-optimizer"` を併用。完了後、ユーザーのレビューゲートを挟む。
+1. **Phase 1** — `subagent_type: "tdd-test-case-writer"` を起動し、テストケースを列挙させる。完了後、Phase 2 へ進む。
+1. **Phase 2** — `subagent_type: "tdd-test-case-reviewer"` を起動し、テストケースをレビューさせ、必要に応じて修正させる。完了後、ユーザーのレビューゲートを挟む。勝手に Phase 3 へ進まない。
+1. **Phase 3** — `subagent_type: "tdd-test-code-writer"` を起動し、Phase 1 のケースから 1 つ選んで失敗するテストを書かせる。`bun test` で失敗を確認後、ユーザーのレビューゲートを挟む。
+1. **Phase 4** — `subagent_type: "tdd-implementer"` を起動し、テストを通す最小実装を書かせる。`bun test` でパスを確認する。
+1. **Phase 5** — `subagent_type: "tdd-refactorer"` を起動し、テストを保ったままリファクタリングする。UI 変更があれば `subagent_type: "ui-optimizer"` を併用。完了後、ユーザーのレビューゲートを挟む。
 
 ## 制約（全 Phase 共通）
 

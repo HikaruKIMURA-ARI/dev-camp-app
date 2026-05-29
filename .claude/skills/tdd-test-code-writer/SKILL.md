@@ -17,13 +17,6 @@ trigger: RED|テストコード作成|test code writing|Phase2
 3. 失敗メッセージが期待通りであることを確認する
 4. 完了後、必ずユーザーのレビューゲートを挟む。勝手に Phase 3 へ進まない
 
-## テスト命名規則
-
-- `describe`: 対象の機能
-- `it` / `test`: `should [期待する振る舞い] when [条件]` を **日本語** で表現し、生きたドキュメントにする
-- 実装の詳細ではなく、実際の振る舞いをケース名にする
-- 例: ❌ `it('should return 0 when input is empty string')` → ✅ `it('入力が何もない時は、0が表示されること')`
-
 ## AAA パターン（必須）
 
 ```ts
