@@ -659,7 +659,8 @@ export const Layout: FC<{ theme?: Theme; children?: Child }> = ({ children, them
     <head>
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>devcamp</title>
+      <title>BI調整San</title>
+      <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
       <link rel="stylesheet" href="/static/pico.min.css" />
       <link rel="stylesheet" href="/static/app.css" />
       <script src="/static/htmx.min.js" defer />
