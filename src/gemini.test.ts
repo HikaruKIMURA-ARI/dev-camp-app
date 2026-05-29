@@ -225,7 +225,9 @@ describe("gemini Adapter / defaultCardGenerator.generate", () => {
 
       // Assert: SDK の第 1 引数 config.responseMimeType が 'application/json'。
       // 構造化出力モードでの JSON 強制応答を担保する（AC 7.1）。
-      const arg0 = capturedArgs[0] as { config?: { responseMimeType?: string } };
+      const arg0 = capturedArgs[0] as {
+        config?: { responseMimeType?: string };
+      };
       expect(arg0?.config?.responseMimeType).toBe("application/json");
     });
 

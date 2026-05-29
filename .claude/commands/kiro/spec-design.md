@@ -90,7 +90,11 @@ Generate technical design document for feature **$1** based on approved requirem
 - Read `.kiro/settings/templates/specs/design.md` for structure
 - Read `.kiro/settings/rules/design-principles.md` for principles
 
-2. **Generate Design Document**:
+2.  **ユーザーとの設計方針のすり合わせ**
+
+- `.claude/skills/grill-me/SKILL.md` を使って徹底的に質問し、解像度の高い要件定義を行なってください。
+
+3.  **Generate Design Document**:
 
 - **Follow specs/design.md template structure and generation instructions strictly**
 - **Integrate all discovery findings**: Use researched information (APIs, patterns, technologies) throughout component definitions, architecture decisions, and integration points

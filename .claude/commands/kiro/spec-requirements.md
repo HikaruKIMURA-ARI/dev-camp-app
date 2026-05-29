@@ -39,6 +39,7 @@ Generate complete requirements for feature **$1** based on the project descripti
    - Group related functionality into logical requirement areas
    - Apply EARS format to all acceptance criteria
    - Use language specified in spec.json
+   - `.claude/skills/grill-me/SKILL.md` を使って徹底的に質問し、解像度の高い要件定義を行なってください。
 
 4. **Update Metadata**:
    - Set `phase: "requirements-generated"`

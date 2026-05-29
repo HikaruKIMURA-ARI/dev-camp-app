@@ -24,9 +24,18 @@ const RACE_EMOJI: Record<string, string> = {
   幻獣: "🦅",
   魚: "🐟",
   サイバー: "🤖",
-  盗賊: "🥷",
-  ヒト: "👤",
-  出席者: "🎫",
+  獣戦士: "🦁",
+  天使: "👼",
+  恐竜: "🦕",
+  岩石: "🪨",
+  サイキック: "🔮",
+  爬虫類: "🐍",
+  水: "💧",
+  炎: "🔥",
+  雷: "⚡",
+  機械: "🤖",
+  植物: "🌱",
+  昆虫: "🐛",
 };
 
 const ATTRIBUTE_CLASS: Record<string, string> = {
@@ -85,10 +94,10 @@ const CardView: FC<{ card: PersistedCard }> = ({ card }) => {
   );
 };
 
-export const CardsCarousel: FC<{ responses: ResponseWithAnswers[]; oob?: boolean }> = ({
-  responses,
-  oob,
-}) => (
+export const CardsCarousel: FC<{
+  responses: ResponseWithAnswers[];
+  oob?: boolean;
+}> = ({ responses, oob }) => (
   <div id="cards" class="cards-carousel" {...(oob ? { "hx-swap-oob": "true" } : {})}>
     {responses.map((r) =>
       r.card ? (
@@ -112,10 +121,10 @@ export type EventNewFormValues = {
 
 export type EventNewFormErrors = string[];
 
-export const EventNewForm: FC<{ values?: EventNewFormValues; errors?: EventNewFormErrors }> = ({
-  values,
-  errors,
-}) => {
+export const EventNewForm: FC<{
+  values?: EventNewFormValues;
+  errors?: EventNewFormErrors;
+}> = ({ values, errors }) => {
   const titleValue = values?.title ?? "";
   const customQuestionValue = values?.customQuestion ?? "";
   const descriptionValue = values?.description ?? "";
@@ -382,7 +391,11 @@ export const ResponsesTable: FC<{
           <tr>
             <td>集計</td>
             {options.map((option) => {
-              const agg = aggregates[String(option.id)] ?? { circle: 0, triangle: 0, cross: 0 };
+              const agg = aggregates[String(option.id)] ?? {
+                circle: 0,
+                triangle: 0,
+                cross: 0,
+              };
               return (
                 <td {...topPickAggregateAttr(option.id)}>
                   ○ {agg.circle} △ {agg.triangle} × {agg.cross}
@@ -418,24 +431,47 @@ export const EventPage: FC<{
 
   return (
     <article>
-      <h1>{event.title}</h1>
+      <header style="margin-bottom: 1rem;">
+        <small style="color: var(--pico-muted-color); display: block; font-size: 0.875em;">
+          タイトル
+        </small>
+        <h1 style="margin-top: 0.375rem; margin-bottom: 0;">{event.title}</h1>
+      </header>
       {description !== null ? (
-        <p class="event-description" style="white-space: pre-wrap;">
-          {description}
-        </p>
+        <section style="margin-bottom: 1rem;">
+          <small style="color: var(--pico-muted-color); display: block; font-size: 0.875em;">
+            詳細
+          </small>
+          <p
+            class="event-description"
+            style="white-space: pre-wrap; margin-top: 0.375rem; margin-bottom: 0;"
+          >
+            {description}
+          </p>
+        </section>
       ) : null}
-      <ul>
-        {options.map((option) => (
-          <li>{formatOptionLabel(option.label)}</li>
-        ))}
-      </ul>
+      <section style="margin-bottom: 1rem;">
+        <small style="color: var(--pico-muted-color); display: block; font-size: 0.875em;">
+          候補日
+        </small>
+        <ul style="margin-top: 0.375rem;">
+          {options.map((option) => (
+            <li>{formatOptionLabel(option.label)}</li>
+          ))}
+        </ul>
+      </section>
       {/*
         旧仕様（events.custom_question 単数）の設問ヘッダー表示は廃止。
         設問は新仕様（event_custom_questions テーブル）から fieldset 内に表示される。
         showCustomQuestion 変数は他のテンプレ計算で参照する可能性があるため残置。
       */}
       {showCustomQuestion ? null : null}
-      <CardsCarousel responses={responses} />
+      <section style="margin-bottom: 1rem;">
+        <small style="color: var(--pico-muted-color); display: block; font-size: 0.875em;">
+          回答者
+        </small>
+        <CardsCarousel responses={responses} />
+      </section>
       <div id="responses">
         <ResponsesTable
           event={event}
