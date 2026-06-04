@@ -8,3 +8,7 @@ playwright-report/
 test-results/
 .playwright-mcp/
 *.log
+.wrangler/
+.dev.vars
+public/static/
+public/favicon.ico
