@@ -28,6 +28,53 @@ drizzle/     マイグレーション
 tests/e2e/   Playwright E2E テスト
 ```
 
+## GitHub Actions でデプロイ
+
+`main` への push、または Actions タブから **Deploy** ワークフローを手動実行すると、`bun test` と E2E（Playwright）に通ったあと、Turso へ `bun db:mig` して Cloudflare Workers へデプロイします。テスト用の DB は `.env.test` / `test-e2e.db` のため、Turso の Secrets はデプロイジョブでのみ使います。
+
+リポジトリの **Settings → Secrets and variables → Actions** に次を登録してください。
+
+| Secret                  | 用途                              |
+| ----------------------- | --------------------------------- |
+| `TURSO_DATABASE_URL`    | 本番 libSQL URL（`libsql://...`） |
+| `TURSO_AUTH_TOKEN`      | Turso 認証トークン                |
+| `CLOUDFLARE_API_TOKEN`  | Workers 編集権限付き API トークン |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare アカウント ID          |
+
+`GEMINI_API_KEY` などランタイム用の値は、初回のみ `wrangler secret put` で Cloudflare 側に設定してください（デプロイのたびに Actions から渡す必要はありません）。
+
+## Cloudflare Workers へのデプロイ（手動）
+
+1. [Turso](https://turso.tech/) で本番 DB を用意し、マイグレーションを適用する。
+
+```bash
+TURSO_DATABASE_URL=libsql://... TURSO_AUTH_TOKEN=... bun db:mig
+```
+
+2. Cloudflare にログインし、シークレットを設定する。
+
+```bash
+bunx wrangler login
+bunx wrangler secret put TURSO_DATABASE_URL
+bunx wrangler secret put TURSO_AUTH_TOKEN
+# 任意: bunx wrangler secret put GEMINI_API_KEY
+```
+
+3. ローカルで Workers を試す場合は `.dev.vars` を用意する（`.dev.vars.example` 参照）。
+
+```bash
+cp .dev.vars.example .dev.vars
+bun run dev:worker
+```
+
+4. デプロイする。
+
+```bash
+bun run deploy
+```
+
+静的ファイル（htmx / Alpine / Pico など）は `bun run prepare:assets` で `public/static/` にコピーされ、Wrangler の [Static Assets](https://developers.cloudflare.com/workers/static-assets/) から配信されます。Workers 上では `SKIP_DB_MIGRATE=1` のため、DB スキーマ変更はデプロイ前の `bun db:mig` で行ってください。
+
 ## 開発ルール
 
 - TDD ワークフロー: `.claude/skills/tdd-workflow/SKILL.md`

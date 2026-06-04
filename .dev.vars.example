@@ -1,0 +1,8 @@
+# wrangler dev / deploy 用（`cp .dev.vars.example .dev.vars` して値を入れる）
+# 本番シークレットは `wrangler secret put <NAME>` を推奨
+
+TURSO_DATABASE_URL=libsql://<your-db>-<org>.turso.io
+TURSO_AUTH_TOKEN=<your-auth-token>
+
+# GEMINI_API_KEY=
+# GEMINI_MODEL=gemini-2.0-flash

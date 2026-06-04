@@ -23,7 +23,9 @@ const client = createClient({
 
 export const db = drizzle(client);
 
-await migrate(db, { migrationsFolder: "./drizzle" });
+if (process.env.SKIP_DB_MIGRATE !== "1") {
+  await migrate(db, { migrationsFolder: "./drizzle" });
+}
 
 export interface CreateEventInput {
   title: string;

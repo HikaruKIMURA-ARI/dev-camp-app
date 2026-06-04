@@ -1,0 +1,14 @@
+name = "devcamp"
+main = "src/worker.ts"
+compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]
+
+# /static/* などは public/ 配下のパスで自動配信（Worker より先）
+[assets]
+directory = "./public"
+
+[vars]
+SKIP_DB_MIGRATE = "1"
+
+[observability]
+enabled = true
