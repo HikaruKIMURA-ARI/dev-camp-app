@@ -16,7 +16,7 @@
     "lint": "oxlint --fix",
     "fmt": "oxfmt",
     "typecheck": "tsc --noEmit",
-    "prepare:assets": "mkdir -p public/static && cp node_modules/htmx.org/dist/htmx.min.js public/static/ && cp node_modules/alpinejs/dist/cdn.min.js public/static/ && cp node_modules/@picocss/pico/css/pico.min.css public/static/pico.min.css && cp public/app.css public/static/app.css && cp public/favicon.svg public/static/favicon.svg && cp public/favicon.svg public/favicon.ico",
+    "prepare:assets": "mkdir -p public/static && cp node_modules/htmx.org/dist/htmx.min.js public/static/ && cp node_modules/alpinejs/dist/cdn.min.js public/static/alpine.min.js && cp node_modules/@picocss/pico/css/pico.min.css public/static/pico.min.css && cp public/app.css public/static/app.css && cp public/favicon.svg public/static/favicon.svg && cp public/favicon.svg public/favicon.ico",
     "dev:worker": "bun run prepare:assets && wrangler dev",
     "deploy": "bun run prepare:assets && wrangler deploy"
   },
