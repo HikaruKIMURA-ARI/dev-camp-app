@@ -9,6 +9,7 @@ import {
   getResponseById,
   updateResponse,
 } from "./db";
+import { isDeadlinePassed } from "./deadline";
 import {
   CardsCarousel,
   EventNewForm,
@@ -47,6 +48,13 @@ const eventCreateSchema = z.object({
   customQuestion: z.string().max(200).optional(),
   customQuestions: z.array(z.string().trim().min(1).max(200)).max(20).optional(),
   description: z.string().max(2000).optional(),
+  deadline: z
+    .string()
+    .optional()
+    .refine(
+      (v) => v === undefined || v === "" || !Number.isNaN(Date.parse(v)),
+      "回答締め切りの日時が不正です",
+    ),
 });
 
 const normalizeOptions = (raw: unknown): string[] => {
@@ -74,6 +82,7 @@ routes.post("/events", async (c) => {
     typeof body.customQuestion === "string" ? body.customQuestion : undefined;
   const rawCustomQuestions = normalizeCustomQuestions(body["customQuestions[]"]);
   const rawDescription = typeof body.description === "string" ? body.description : undefined;
+  const rawDeadline = typeof body.deadline === "string" ? body.deadline : undefined;
 
   const parsed = eventCreateSchema.safeParse({
     title: rawTitle,
@@ -81,6 +90,7 @@ routes.post("/events", async (c) => {
     customQuestion: rawCustomQuestion,
     customQuestions: rawCustomQuestions,
     description: rawDescription,
+    deadline: rawDeadline,
   });
 
   if (!parsed.success) {
@@ -109,6 +119,8 @@ routes.post("/events", async (c) => {
     parsed.data.description === undefined || parsed.data.description === ""
       ? null
       : parsed.data.description;
+  const deadline =
+    parsed.data.deadline === undefined || parsed.data.deadline === "" ? null : parsed.data.deadline;
 
   const { id } = await createEvent({
     title: parsed.data.title,
@@ -116,6 +128,7 @@ routes.post("/events", async (c) => {
     customQuestion,
     customQuestions,
     description,
+    deadline,
   });
 
   return c.redirect(`/events/${id}`, 302);
@@ -297,6 +310,11 @@ routes.post("/events/:id/responses", async (c) => {
   const data = await getEventWithOptions(id);
   if (!data) return c.notFound();
 
+  // 締め切りが過去のイベントへの新規回答はサーバ側で拒否する
+  if (isDeadlinePassed(data.event.deadline)) {
+    return c.body(null, 422);
+  }
+
   const raw = await readResponseSubmission(c);
   const validOptionIds = new Set(data.options.map((o) => String(o.id)));
   const validQuestionIds = new Set(data.customQuestions.map((q) => String(q.id)));
@@ -348,6 +366,11 @@ routes.put("/events/:id/responses/:responseId", async (c) => {
 
   const responseRow = await getResponseById(responseId);
   if (!responseRow || responseRow.eventId !== eventId) return c.notFound();
+
+  // 締め切りが過去のイベントの既存回答への更新はサーバ側で拒否する
+  if (isDeadlinePassed(data.event.deadline)) {
+    return c.body(null, 422);
+  }
 
   const raw = await readResponseSubmission(c);
   const validOptionIds = new Set(data.options.map((o) => String(o.id)));

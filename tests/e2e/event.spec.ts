@@ -17,7 +17,7 @@ const createEvent = async (page: Page, title: string): Promise<void> => {
 };
 
 test.describe("イベント作成フロー（ハッピーパス）", () => {
-  test("イベント作成: タイトルと候補日時を入力して送信すると詳細ページへ画面遷移し、タイトルと候補日時が表示される", async ({
+  test("イベント作成: タイトル・候補日時・回答締め切りを入力して送信すると詳細ページへ画面遷移し、タイトル・候補日時・締め切りが表示される", async ({
     page,
   }) => {
     const title = "懇親会の日程調整";
@@ -25,11 +25,14 @@ test.describe("イベント作成フロー（ハッピーパス）", () => {
 
     await page.getByLabel("イベント名").fill(title);
     await page.getByLabel("候補 1").fill(DATETIME_VALUE);
+    await page.getByLabel("回答締め切り（任意）").fill("2026-06-15T18:00");
     await page.getByRole("button", { name: "作成" }).click();
 
     await expect(page).toHaveURL(/\/events\/[^/]+$/);
     await expect(page.getByRole("heading", { name: title })).toBeVisible();
     await expect(page.getByRole("listitem").filter({ hasText: DATETIME_LABEL })).toBeVisible();
+    await expect(page.getByText("回答締め切り", { exact: true })).toBeVisible();
+    await expect(page.getByText("2026/06/15 (月) 18:00")).toBeVisible();
   });
 });
 

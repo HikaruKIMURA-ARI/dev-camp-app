@@ -6,6 +6,7 @@ export const events = sqliteTable("events", {
   title: text("title").notNull(),
   customQuestion: text("custom_question"),
   description: text("description"),
+  deadline: text("deadline"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),

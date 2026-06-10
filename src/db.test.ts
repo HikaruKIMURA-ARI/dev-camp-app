@@ -299,7 +299,11 @@ describe("src/db.ts — 参加者カード拡張（Task 2.2）", () => {
 
     it("addResponse で書いたカード未紐付けの回答は responses[i].card === null になる", async () => {
       // Act
-      await addResponse(eventId, { name: "ボブ", answers: {}, customAnswer: null });
+      await addResponse(eventId, {
+        name: "ボブ",
+        answers: {},
+        customAnswer: null,
+      });
 
       // Assert
       const result = await getEventWithOptions(eventId);
@@ -1288,7 +1292,9 @@ describe("src/db.ts — getEventWithOptions（新スキーマ）", () => {
     // Assert
     expect(data).not.toBeNull();
     const customQuestions = (
-      data as unknown as { customQuestions: Array<{ question: string; sortOrder: number }> }
+      data as unknown as {
+        customQuestions: Array<{ question: string; sortOrder: number }>;
+      }
     ).customQuestions;
     expect(customQuestions.map((q) => q.question)).toEqual(["一番目", "二番目", "三番目"]);
     expect(customQuestions.map((q) => q.sortOrder)).toEqual([0, 1, 2]);
@@ -1381,5 +1387,101 @@ describe("src/db.ts — getEventWithOptions（新スキーマ）", () => {
     const byName = new Map(responses.map((r) => [r.name, r.comment]));
     expect(byName.get("コメント有り")).toBe("よろしく");
     expect(byName.get("コメント無し")).toBe(null);
+  });
+});
+
+// いいテストケース
+describe("src/db.ts — 回答締め切り（deadline）", () => {
+  beforeEach(async () => {
+    // 子 → 親順に truncate（FK 制約を踏まないよう）
+    await db.delete(participantCards);
+    await db.delete(eventOptionResponses);
+    await db.delete(eventCustomAnswers);
+    await db.delete(eventResponses);
+    await db.delete(eventCustomQuestions);
+    await db.delete(eventOptions);
+    await db.delete(events);
+  });
+
+  // 締め切りを指定して作成すると保存される
+  describe("createEvent に deadline を渡すと events.deadline に保存される", () => {
+    it("deadline に日時文字列（例: 2026-06-30T18:00）を渡すと events.deadline に同じ値が保存される", async () => {
+      // Act
+      const { id } = await createEvent({
+        title: "締め切り付きイベント",
+        options: ["18:00"],
+        customQuestions: [],
+        deadline: "2026-06-30T18:00",
+      });
+
+      // Assert
+      const [row] = await db.select().from(events).where(eq(events.id, id));
+      expect((row as unknown as { deadline: string | null }).deadline).toBe("2026-06-30T18:00");
+    });
+  });
+
+  // 締め切りは任意項目（指定しなければ「締め切りなし」= null）
+  describe("createEvent に deadline を指定しない場合は events.deadline は null として保存される", () => {
+    it("deadline を未指定（undefined）にすると events.deadline は null として保存される", async () => {
+      // Act
+      const { id } = await createEvent({
+        title: "締め切り未指定イベント",
+        options: ["18:00"],
+        customQuestions: [],
+      });
+
+      // Assert
+      const [row] = await db.select().from(events).where(eq(events.id, id));
+      expect((row as unknown as { deadline: string | null }).deadline).toBe(null);
+    });
+    it("deadline に null を渡すと events.deadline は null として保存される", async () => {
+      // Act
+      const { id } = await createEvent({
+        title: "締め切り null イベント",
+        options: ["18:00"],
+        customQuestions: [],
+        deadline: null,
+      });
+
+      // Assert
+      const [row] = await db.select().from(events).where(eq(events.id, id));
+      expect((row as unknown as { deadline: string | null }).deadline).toBe(null);
+    });
+  });
+
+  // 読み出し側も deadline を返す
+  describe("getEventWithOptions は保存した deadline をそのまま返す", () => {
+    it("deadline 付きで作成したイベントを読み出すと event.deadline に保存値が含まれる", async () => {
+      // Arrange
+      const { id } = await createEvent({
+        title: "締め切り付きイベント",
+        options: ["18:00"],
+        customQuestions: [],
+        deadline: "2026-06-30T18:00",
+      });
+
+      // Act
+      const data = await getEventWithOptions(id);
+
+      // Assert
+      expect(data).not.toBeNull();
+      expect(data!.event.deadline).toBe("2026-06-30T18:00");
+    });
+    it("deadline なし（null）で作成したイベントを読み出すと event.deadline が null になる", async () => {
+      // Arrange
+      const { id } = await createEvent({
+        title: "締め切りなしイベント",
+        options: ["18:00"],
+        customQuestions: [],
+        deadline: null,
+      });
+
+      // Act
+      const data = await getEventWithOptions(id);
+
+      // Assert
+      expect(data).not.toBeNull();
+      expect(data!.event.deadline).toBe(null);
+    });
   });
 });

@@ -33,6 +33,7 @@ export interface CreateEventInput {
   customQuestion?: string | null;
   customQuestions?: string[];
   description?: string | null;
+  deadline?: string | null;
 }
 
 export const createEvent = async (input: CreateEventInput): Promise<{ id: string }> => {
@@ -52,6 +53,7 @@ export const createEvent = async (input: CreateEventInput): Promise<{ id: string
       title: input.title,
       customQuestion: legacyCustomQuestion,
       description: input.description ?? null,
+      deadline: input.deadline ?? null,
     });
 
     if (customQuestionsList.length > 0) {
