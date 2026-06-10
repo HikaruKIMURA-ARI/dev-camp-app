@@ -43,6 +43,13 @@
       "when": 1779417608245,
       "tag": "0005_flaky_leo",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1781066895738,
+      "tag": "0006_add_event_deadline",
+      "breakpoints": true
     }
   ]
 }

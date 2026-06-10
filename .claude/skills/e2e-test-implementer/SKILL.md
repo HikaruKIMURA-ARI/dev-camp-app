@@ -25,6 +25,10 @@ trigger: E2E 実装|e2e implement|Phase2 e2e
 - `test`: `〜のとき〜であること` を **日本語** で表現し、生きたドキュメントにする
 - 実装の詳細ではなく、ユーザー目線の振る舞いをケース名にする
 
+## 記載方法の具体例 超重要！！
+
+`.claude/rules/testing/e2e-test-case-example.md` を参照し、ドキュメントとして生きるいい E2E テストケースを書くこと
+
 ## AAA パターン（必須）
 
 ```ts

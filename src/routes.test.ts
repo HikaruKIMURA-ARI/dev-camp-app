@@ -41,12 +41,6 @@ describe("routes (Hono sub-app) mounted on app", () => {
       expect(response.status).toBe(302);
       expect(response.headers.get("location")).toBe("/events/new");
     });
-
-    it.todo("GET / のレスポンスは Location ヘッダだけで遷移を成立させる", () => {});
-  });
-
-  describe("アプリ組み立ての健全性（マウント済みであること）", () => {
-    it.todo("未定義のパスへの GET は 404 を返す", () => {});
   });
 
   /**
@@ -84,8 +78,6 @@ describe("routes (Hono sub-app) mounted on app", () => {
       // Assert
       expect(response.status).toBe(200);
     });
-
-    it.todo("Content-Type に text/html を含めて返る", () => {});
 
     it("GET /events/new はアプリのレイアウトに収まったフルページの HTML を返す", async () => {
       // Arrange
@@ -1310,7 +1302,10 @@ describe("routes (Hono sub-app) mounted on app", () => {
             options: ["2026-01-10 19:00"],
           });
           const [opt] = seeded.optionIds;
-          const participants: Array<{ name: string; rarity: "UR" | "SR" | "R" }> = [
+          const participants: Array<{
+            name: string;
+            rarity: "UR" | "SR" | "R";
+          }> = [
             { name: "山田太郎", rarity: "R" },
             { name: "佐藤花子", rarity: "SR" },
             { name: "鈴木一郎", rarity: "UR" },
@@ -1447,7 +1442,10 @@ describe("routes (Hono sub-app) mounted on app", () => {
             options: ["2026-01-10 19:00"],
           });
           const [opt] = seeded.optionIds;
-          const participants: Array<{ name: string; rarity: "UR" | "SR" | "R" | "N" }> = [
+          const participants: Array<{
+            name: string;
+            rarity: "UR" | "SR" | "R" | "N";
+          }> = [
             { name: "山田太郎", rarity: "UR" },
             { name: "佐藤花子", rarity: "SR" },
             { name: "鈴木一郎", rarity: "R" },
@@ -6257,6 +6255,849 @@ describe("routes (Hono sub-app) mounted on app", () => {
       const rows = await database.select().from(schema.eventResponses);
       expect(rows).toHaveLength(1);
       expect(rows[0]?.comment).toBe("更新前の文言");
+    });
+  });
+
+  // いいテストケース
+  describe("新仕様: 回答締め切り（deadline）", () => {
+    // イベント作成フォームに締め切りを入力できる（任意項目）
+    describe("GET /events/new — 締め切り入力欄（任意項目）", () => {
+      it('フォームに name="deadline" の datetime-local 入力欄が含まれる', async () => {
+        // Arrange
+        const request = new Request("http://localhost:8787/events/new");
+
+        // Act
+        const response = await app.fetch(request);
+        const body = await response.text();
+
+        // Assert
+        const deadlineInput = body.match(/<input[^>]*\bname=["']deadline["'][^>]*>/i)?.[0] ?? "";
+        expect(deadlineInput).toMatch(/\btype=["']datetime-local["']/i);
+      });
+      it("deadline の入力欄には required 属性が付いていない（任意項目）", async () => {
+        // Arrange
+        const request = new Request("http://localhost:8787/events/new");
+
+        // Act
+        const response = await app.fetch(request);
+        const body = await response.text();
+
+        // Assert
+        const deadlineInput = body.match(/<input[^>]*\bname=["']deadline["'][^>]*>/i);
+        expect(deadlineInput).not.toBeNull();
+        expect(deadlineInput![0]).not.toMatch(/\brequired\b/i);
+      });
+    });
+
+    // 締め切りはイベント作成時に受け取り、永続化する
+    describe("POST /events — deadline の受け取りとバリデーション", () => {
+      // 既存 Task 2.2 と同じく、:memory: SQLite に向けた状態で動的 import し、
+      // `beforeEach` で events / event_options を truncate してケース間の隔離を確保する。
+      let localApp: Hono;
+      let database: typeof import("./db").db;
+      let schema: typeof import("./schema");
+
+      beforeAll(async () => {
+        const dbMod = await import("./db");
+        database = dbMod.db;
+        schema = await import("./schema");
+        const routesMod = await import("./routes");
+        const { Hono } = await import("hono");
+        const sub = new Hono();
+        sub.route("/", routesMod.default);
+        localApp = sub;
+      });
+
+      beforeEach(async () => {
+        await database.delete(schema.eventOptions);
+        await database.delete(schema.events);
+      });
+
+      // 共通ヘルパ: URL エンコードフォームを組み立てる（既存 POST /events テスト群と同形式）
+      const buildFormRequest = (entries: Array<[string, string]>): Request => {
+        const params = new URLSearchParams();
+        for (const [k, v] of entries) {
+          params.append(k, v);
+        }
+        return new Request("http://localhost:8787/events", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: params.toString(),
+        });
+      };
+
+      describe("正常系（任意項目としての保存）", () => {
+        it("有効な deadline（datetime-local 形式）を送ると 302 を返し events.deadline に送信値が保存される", async () => {
+          // Act
+          const response = await localApp.fetch(
+            buildFormRequest([
+              ["title", "新年会"],
+              ["options", "2026-01-10 19:00"],
+              ["deadline", "2026-01-08T18:00"],
+            ]),
+          );
+
+          // Assert
+          expect(response.status).toBe(302);
+          const rows = await database.select().from(schema.events);
+          expect(rows[0]?.deadline).toBe("2026-01-08T18:00");
+        });
+        it("deadline を空文字で送ると 302 を返し events.deadline は null として保存される", async () => {
+          // Act
+          const response = await localApp.fetch(
+            buildFormRequest([
+              ["title", "新年会"],
+              ["options", "2026-01-10 19:00"],
+              ["deadline", ""],
+            ]),
+          );
+
+          // Assert
+          expect(response.status).toBe(302);
+          const rows = await database.select().from(schema.events);
+          expect(rows[0]?.deadline).toBeNull();
+        });
+        it("deadline フィールド自体を送らなくても 302 を返し events.deadline は null として保存される", async () => {
+          // Act
+          const response = await localApp.fetch(
+            buildFormRequest([
+              ["title", "新年会"],
+              ["options", "2026-01-10 19:00"],
+            ]),
+          );
+
+          // Assert
+          expect(response.status).toBe(302);
+          const rows = await database.select().from(schema.events);
+          expect(rows[0]?.deadline).toBeNull();
+        });
+      });
+
+      describe("バリデーション失敗時の差し戻し（422 + 副作用なし）", () => {
+        it("deadline に日時として解釈できない文字列を送ると 422 を返す", async () => {
+          // Act
+          const response = await localApp.fetch(
+            buildFormRequest([
+              ["title", "新年会"],
+              ["options", "2026-01-10 19:00"],
+              ["deadline", "これは日時ではない"],
+            ]),
+          );
+
+          // Assert
+          expect(response.status).toBe(422);
+        });
+        it("deadline が無効で 422 を返したとき events テーブルにレコードは作成されない（副作用なし）", async () => {
+          // Act
+          const response = await localApp.fetch(
+            buildFormRequest([
+              ["title", "新年会"],
+              ["options", "2026-01-10 19:00"],
+              ["deadline", "これは日時ではない"],
+            ]),
+          );
+
+          // Assert: 差し戻し（422）であることをガードしつつ、DB に副作用が残らないことを検証する
+          expect(response.status).toBe(422);
+          const rows = await database.select().from(schema.events);
+          expect(rows).toHaveLength(0);
+        });
+        it("deadline が無効な 422 時のレスポンス本文には送信した title の値が含まれる（入力値保持）", async () => {
+          // Act
+          const response = await localApp.fetch(
+            buildFormRequest([
+              ["title", "保持されるべきタイトル新年会"],
+              ["options", "2026-01-10 19:00"],
+              ["deadline", "これは日時ではない"],
+            ]),
+          );
+          const body = await response.text();
+
+          // Assert: 差し戻し画面に入力した title がそのまま保持されている
+          expect(response.status).toBe(422);
+          expect(body).toContain("保持されるべきタイトル新年会");
+        });
+      });
+    });
+
+    // 締め切り後はイベントページの回答フォームを入力不可にする
+    // （deadline がちょうど現在時刻の境界は実行タイミング依存で flaky になるため意図的に対象外）
+    describe("GET /events/:id — 締め切りが過ぎたイベントでは回答フォームを無効化する", () => {
+      // 既存 GET /events/:id テスト群と同じく動的 import + beforeEach truncate で隔離する。
+      // イベントの arrange は deadline をサポートする createEvent（src/db.ts）で行う。
+      let localApp: Hono;
+      let database: typeof import("./db").db;
+      let schema: typeof import("./schema");
+      let createEventFn: typeof import("./db").createEvent;
+      let pastDeadlineEventId: string;
+      let futureDeadlineEventId: string;
+      let noDeadlineEventId: string;
+
+      beforeAll(async () => {
+        const dbMod = await import("./db");
+        database = dbMod.db;
+        createEventFn = dbMod.createEvent;
+        schema = await import("./schema");
+        const routesMod = await import("./routes");
+        const { Hono } = await import("hono");
+        const sub = new Hono();
+        sub.route("/", routesMod.default);
+        localApp = sub;
+      });
+
+      beforeEach(async () => {
+        // 子テーブルから順に truncate（FK cascade に頼らず明示）
+        await database.delete(schema.eventCustomAnswers);
+        await database.delete(schema.eventCustomQuestions);
+        await database.delete(schema.eventOptionResponses);
+        await database.delete(schema.eventResponses);
+        await database.delete(schema.eventOptions);
+        await database.delete(schema.events);
+
+        // Arrange: 締め切りが確実に過去のイベント（カスタム設問付き）を作成する
+        const created = await createEventFn({
+          title: "締め切り済みの新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+          customQuestions: ["アレルギーはありますか？"],
+          deadline: "2020-01-01T00:00",
+        });
+        pastDeadlineEventId = created.id;
+
+        // Arrange: 締め切りが確実に未来のイベント（カスタム設問付き）を作成する
+        const futureEvent = await createEventFn({
+          title: "締め切りが未来の新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+          customQuestions: ["アレルギーはありますか？"],
+          deadline: "2999-12-31T23:59",
+        });
+        futureDeadlineEventId = futureEvent.id;
+
+        // Arrange: 締め切り未設定（null）のイベント（カスタム設問付き）を作成する
+        const noDeadlineEvent = await createEventFn({
+          title: "締め切り未設定の新年会",
+          options: ["2026-01-10 19:00", "2026-01-11 19:00"],
+          customQuestions: ["アレルギーはありますか？"],
+          deadline: null,
+        });
+        noDeadlineEventId = noDeadlineEvent.id;
+      });
+
+      // 共通ヘルパ: 本文から回答フォーム（hx-post=/events/:id/responses の <form>）だけを切り出す
+      const extractResponseForm = (body: string, eventId: string): string =>
+        body.match(
+          new RegExp(
+            `<form[^>]*hx-post=["'][^"']*/events/${eventId}/responses["'][\\s\\S]*?</form>`,
+            "i",
+          ),
+        )?.[0] ?? "";
+
+      // 共通ヘルパ: 単独の disabled 属性が付与されているか（hx-disabled-elt 等の別属性に誤マッチしない）
+      const hasDisabledAttribute = (tag: string): boolean => /\sdisabled(?=[\s>=])/i.test(tag);
+
+      it("締め切りが過去のイベントでは回答フォームの全入力要素（名前・候補日時 radio・カスタム設問・コメント）と回答ボタンに disabled が付く", async () => {
+        // Act
+        const response = await localApp.fetch(
+          new Request(`http://localhost:8787/events/${pastDeadlineEventId}`),
+        );
+        const body = await response.text();
+
+        // Assert: 回答フォームが描画されていること（ガード）
+        const formHtml = extractResponseForm(body, pastDeadlineEventId);
+        expect(formHtml).not.toBe("");
+
+        // 名前入力
+        const nameInput = formHtml.match(/<input[^>]*\bname=["']name["'][^>]*>/i)?.[0] ?? "";
+        expect(nameInput).not.toBe("");
+        expect(hasDisabledAttribute(nameInput)).toBe(true);
+
+        // 候補日時の radio（全件）
+        const radioInputs = formHtml.match(/<input[^>]*\btype=["']radio["'][^>]*>/gi) ?? [];
+        expect(radioInputs.length).toBeGreaterThan(0);
+        for (const radio of radioInputs) {
+          expect(hasDisabledAttribute(radio)).toBe(true);
+        }
+
+        // カスタム設問への回答入力（customAnswers[<questionId>]）
+        const customAnswerInput =
+          formHtml.match(
+            /<(?:input|textarea)[^>]*\bname=["']customAnswers\[\d+\]["'][^>]*>/i,
+          )?.[0] ?? "";
+        expect(customAnswerInput).not.toBe("");
+        expect(hasDisabledAttribute(customAnswerInput)).toBe(true);
+
+        // コメント欄
+        const commentTextarea =
+          formHtml.match(/<textarea[^>]*\bname=["']comment["'][^>]*>/i)?.[0] ?? "";
+        expect(commentTextarea).not.toBe("");
+        expect(hasDisabledAttribute(commentTextarea)).toBe(true);
+
+        // 回答（送信）ボタン
+        const submitButton = formHtml.match(/<button[^>]*\btype=["']submit["'][^>]*>/i)?.[0] ?? "";
+        expect(submitButton).not.toBe("");
+        expect(hasDisabledAttribute(submitButton)).toBe(true);
+      });
+      it("締め切りが未来のイベントではどの入力要素・回答ボタンにも disabled が付かない（従来どおり入力可能）", async () => {
+        // Act
+        const response = await localApp.fetch(
+          new Request(`http://localhost:8787/events/${futureDeadlineEventId}`),
+        );
+        const body = await response.text();
+
+        // Assert: 回答フォームが描画されていること（ガード）
+        const formHtml = extractResponseForm(body, futureDeadlineEventId);
+        expect(formHtml).not.toBe("");
+
+        // フォーム内の全入力要素・ボタンに disabled が 1 つも付かない
+        const formControls = formHtml.match(/<(?:input|textarea|button)[^>]*>/gi) ?? [];
+        expect(formControls.length).toBeGreaterThan(0);
+        for (const control of formControls) {
+          expect(hasDisabledAttribute(control)).toBe(false);
+        }
+      });
+      it("締め切り未設定（null）のイベントではどの入力要素・回答ボタンにも disabled が付かない（従来どおり入力可能）", async () => {
+        // Act
+        const response = await localApp.fetch(
+          new Request(`http://localhost:8787/events/${noDeadlineEventId}`),
+        );
+        const body = await response.text();
+
+        // Assert: 回答フォームが描画されていること（ガード）
+        const formHtml = extractResponseForm(body, noDeadlineEventId);
+        expect(formHtml).not.toBe("");
+
+        // フォーム内の全入力要素・ボタンに disabled が 1 つも付かない
+        const formControls = formHtml.match(/<(?:input|textarea|button)[^>]*>/gi) ?? [];
+        expect(formControls.length).toBeGreaterThan(0);
+        for (const control of formControls) {
+          expect(hasDisabledAttribute(control)).toBe(false);
+        }
+      });
+    });
+
+    // 編集フォーム（mode: edit の ResponseFormRow）も同様に無効化する
+    describe("GET /events/:id/responses/:responseId/edit — 締め切り後は編集フォームも無効化する", () => {
+      // 兄弟 describe と同じ規約（動的 import + 子から順 truncate）。変数は共有できないため再宣言する。
+      let localApp: Hono;
+      let database: typeof import("./db").db;
+      let schema: typeof import("./schema");
+
+      beforeAll(async () => {
+        const dbMod = await import("./db");
+        database = dbMod.db;
+        schema = await import("./schema");
+        const routesMod = await import("./routes");
+        const { Hono } = await import("hono");
+        const sub = new Hono();
+        sub.route("/", routesMod.default);
+        localApp = sub;
+      });
+
+      beforeEach(async () => {
+        // 子テーブルから順に削除（FK 整合性を明示）
+        await database.delete(schema.eventCustomAnswers);
+        await database.delete(schema.eventCustomQuestions);
+        await database.delete(schema.eventOptionResponses);
+        await database.delete(schema.eventResponses);
+        await database.delete(schema.eventOptions);
+        await database.delete(schema.events);
+      });
+
+      // 共通ヘルパ: 任意の deadline を持つイベント + 候補日時 1 件 + カスタム設問 1 件を seed する
+      const seedEventWithDeadline = async (input: {
+        id: string;
+        deadline: string | null;
+      }): Promise<{ id: string; optionId: number; questionId: number }> => {
+        await database.insert(schema.events).values({
+          id: input.id,
+          title: "新年会",
+          deadline: input.deadline,
+        });
+        const [opt] = await database
+          .insert(schema.eventOptions)
+          .values({
+            eventId: input.id,
+            label: "2026-01-10 19:00",
+            sortOrder: 0,
+          })
+          .returning({ id: schema.eventOptions.id });
+        const [question] = await database
+          .insert(schema.eventCustomQuestions)
+          .values({
+            eventId: input.id,
+            question: "アレルギーはありますか？",
+            sortOrder: 0,
+          })
+          .returning({ id: schema.eventCustomQuestions.id });
+        return { id: input.id, optionId: opt!.id, questionId: question!.id };
+      };
+
+      // 共通ヘルパ: 既存の参加者 1 件（候補回答 + カスタム回答付き）を seed し responseId を返す
+      const seedResponse = async (input: {
+        eventId: string;
+        optionId: number;
+        questionId: number;
+      }): Promise<number> => {
+        const [row] = await database
+          .insert(schema.eventResponses)
+          .values({ eventId: input.eventId, name: "山田太郎" })
+          .returning({ id: schema.eventResponses.id });
+        await database.insert(schema.eventOptionResponses).values({
+          responseId: row.id,
+          optionId: input.optionId,
+          answer: "○",
+        });
+        await database.insert(schema.eventCustomAnswers).values({
+          responseId: row.id,
+          questionId: input.questionId,
+          answer: "ピーナッツ",
+        });
+        return row.id;
+      };
+
+      // 共通ヘルパ: 単独の disabled 属性が付与されているか（別属性に誤マッチしない）
+      const hasDisabledAttribute = (tag: string): boolean => /\sdisabled(?=[\s>=])/i.test(tag);
+
+      // 共通ヘルパ: 編集フォームフラグメントを取得して本文を返す
+      const fetchEditFormBody = async (eventId: string, responseId: number): Promise<string> => {
+        const response = await localApp.fetch(
+          new Request(`http://localhost:8787/events/${eventId}/responses/${responseId}/edit`),
+        );
+        return response.text();
+      };
+
+      it("締め切りが過去のイベントでは編集フォームの全入力要素と回答ボタンに disabled が付く", async () => {
+        // Arrange: 締め切りが過去のイベントと既存回答を投入する
+        const seeded = await seedEventWithDeadline({
+          id: "evt-deadline-edit-past",
+          deadline: "2020-01-01T00:00",
+        });
+        const responseId = await seedResponse({
+          eventId: seeded.id,
+          optionId: seeded.optionId,
+          questionId: seeded.questionId,
+        });
+
+        // Act
+        const body = await fetchEditFormBody(seeded.id, responseId);
+
+        // Assert: 名前入力
+        const nameInput = body.match(/<input[^>]*\bname=["']name["'][^>]*>/i)?.[0] ?? "";
+        expect(nameInput).not.toBe("");
+        expect(hasDisabledAttribute(nameInput)).toBe(true);
+
+        // 候補日時の radio（全件）
+        const radioInputs = body.match(/<input[^>]*\btype=["']radio["'][^>]*>/gi) ?? [];
+        expect(radioInputs.length).toBeGreaterThan(0);
+        for (const radio of radioInputs) {
+          expect(hasDisabledAttribute(radio)).toBe(true);
+        }
+
+        // カスタム設問への回答入力
+        const customAnswerInput =
+          body.match(/<(?:input|textarea)[^>]*\bname=["']customAnswers\[\d+\]["'][^>]*>/i)?.[0] ??
+          "";
+        expect(customAnswerInput).not.toBe("");
+        expect(hasDisabledAttribute(customAnswerInput)).toBe(true);
+
+        // コメント欄
+        const commentTextarea =
+          body.match(/<textarea[^>]*\bname=["']comment["'][^>]*>/i)?.[0] ?? "";
+        expect(commentTextarea).not.toBe("");
+        expect(hasDisabledAttribute(commentTextarea)).toBe(true);
+
+        // 回答（送信）ボタン
+        const submitButton = body.match(/<button[^>]*\btype=["']submit["'][^>]*>/i)?.[0] ?? "";
+        expect(submitButton).not.toBe("");
+        expect(hasDisabledAttribute(submitButton)).toBe(true);
+      });
+      it("締め切りが未来のイベントでは編集フォームに disabled が付かない（従来どおり編集可能）", async () => {
+        // Arrange: 締め切りが未来のイベントと既存回答を投入する
+        const seeded = await seedEventWithDeadline({
+          id: "evt-deadline-edit-future",
+          deadline: "2999-12-31T23:59",
+        });
+        const responseId = await seedResponse({
+          eventId: seeded.id,
+          optionId: seeded.optionId,
+          questionId: seeded.questionId,
+        });
+
+        // Act
+        const body = await fetchEditFormBody(seeded.id, responseId);
+
+        // Assert: 編集フォームの全入力要素・ボタンに disabled が 1 つも付かない
+        const formControls = body.match(/<(?:input|textarea|button)[^>]*>/gi) ?? [];
+        expect(formControls.length).toBeGreaterThan(0);
+        for (const control of formControls) {
+          expect(hasDisabledAttribute(control)).toBe(false);
+        }
+      });
+    });
+
+    // クライアントの disabled だけでなくサーバ側でも新規回答を拒否する
+    // （拒否ステータスは既存のフォーム差し戻し規約に合わせて 422。403 は認可エラーの意味になるため不採用）
+    describe("POST /events/:id/responses — 締め切り後の新規回答をサーバ側で拒否する", () => {
+      // 兄弟 describe と同じ規約（動的 import + 子から順 truncate）。変数は共有できないため再宣言する。
+      let localApp: Hono;
+      let database: typeof import("./db").db;
+      let schema: typeof import("./schema");
+
+      beforeAll(async () => {
+        const dbMod = await import("./db");
+        database = dbMod.db;
+        schema = await import("./schema");
+        const routesMod = await import("./routes");
+        const { Hono } = await import("hono");
+        const sub = new Hono();
+        sub.route("/", routesMod.default);
+        localApp = sub;
+      });
+
+      beforeEach(async () => {
+        // 子テーブルから順に削除（FK 整合性を明示）
+        await database.delete(schema.eventCustomAnswers);
+        await database.delete(schema.eventCustomQuestions);
+        await database.delete(schema.eventOptionResponses);
+        await database.delete(schema.eventResponses);
+        await database.delete(schema.eventOptions);
+        await database.delete(schema.events);
+      });
+
+      // 共通ヘルパ: 任意の deadline を持つイベント + 候補日時 1 件を seed する
+      const seedEventWithDeadline = async (input: {
+        id: string;
+        deadline: string | null;
+      }): Promise<{ id: string; optionId: number }> => {
+        await database.insert(schema.events).values({
+          id: input.id,
+          title: "新年会",
+          deadline: input.deadline,
+        });
+        const [opt] = await database
+          .insert(schema.eventOptions)
+          .values({
+            eventId: input.id,
+            label: "2026-01-10 19:00",
+            sortOrder: 0,
+          })
+          .returning({ id: schema.eventOptions.id });
+        return { id: input.id, optionId: opt!.id };
+      };
+
+      // 共通ヘルパ: 全候補に回答 + name 付きの有効なフォーム送信を組み立てる
+      const buildValidResponseRequest = (eventId: string, optionId: number): Request => {
+        const params = new URLSearchParams();
+        params.append("name", "山田太郎");
+        params.append(`answers[${optionId}]`, "○");
+        return new Request(`http://localhost:8787/events/${eventId}/responses`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: params.toString(),
+        });
+      };
+
+      it("締め切りが過去のイベントへ有効なフォームを送っても 422 を返す", async () => {
+        // Arrange: 締め切りが過去のイベントを投入する
+        const seeded = await seedEventWithDeadline({
+          id: "evt-deadline-post-past",
+          deadline: "2020-01-01T00:00",
+        });
+
+        // Act: 全候補に回答した有効なフォームを送信する
+        const response = await localApp.fetch(
+          buildValidResponseRequest(seeded.id, seeded.optionId),
+        );
+
+        // Assert: フォーム内容が有効でも締め切り超過によりサーバ側で拒否される
+        expect(response.status).toBe(422);
+      });
+      it("締め切りが過去のイベントへ送った回答は event_responses に保存されない（副作用なし）", async () => {
+        // Arrange: 締め切りが過去のイベントを投入する
+        const seeded = await seedEventWithDeadline({
+          id: "evt-deadline-post-past-noside",
+          deadline: "2020-01-01T00:00",
+        });
+
+        // Act: 全候補に回答した有効なフォームを送信する
+        const response = await localApp.fetch(
+          buildValidResponseRequest(seeded.id, seeded.optionId),
+        );
+
+        // Assert: 拒否（422）をガードしつつ、回答レコードが一切作成されないことを検証する
+        expect(response.status).toBe(422);
+        const rows = await database.select().from(schema.eventResponses);
+        expect(rows).toHaveLength(0);
+      });
+      it("締め切りが未来のイベントへは従来どおり回答が保存される", async () => {
+        // Arrange: 締め切りが未来のイベントを投入する
+        const seeded = await seedEventWithDeadline({
+          id: "evt-deadline-post-future",
+          deadline: "2999-12-31T23:59",
+        });
+
+        // Act: 全候補に回答した有効なフォームを送信する
+        const response = await localApp.fetch(
+          buildValidResponseRequest(seeded.id, seeded.optionId),
+        );
+
+        // Assert: 成功（200）し、回答が event_responses に保存される
+        expect(response.status).toBe(200);
+        const rows = await database.select().from(schema.eventResponses);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.name).toBe("山田太郎");
+      });
+      it("締め切り未設定のイベントへは従来どおり回答が保存される", async () => {
+        // Arrange: 締め切り未設定（null）のイベントを投入する
+        const seeded = await seedEventWithDeadline({
+          id: "evt-deadline-post-null",
+          deadline: null,
+        });
+
+        // Act: 全候補に回答した有効なフォームを送信する
+        const response = await localApp.fetch(
+          buildValidResponseRequest(seeded.id, seeded.optionId),
+        );
+
+        // Assert: 成功（200）し、回答が event_responses に保存される
+        expect(response.status).toBe(200);
+        const rows = await database.select().from(schema.eventResponses);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.name).toBe("山田太郎");
+      });
+    });
+
+    // 既存回答の更新も同様にサーバ側で拒否する
+    describe("PUT /events/:id/responses/:responseId — 締め切り後の回答更新をサーバ側で拒否する", () => {
+      // 兄弟 describe と同じ規約（動的 import + 子から順 truncate）。変数は共有できないため再宣言する。
+      let localApp: Hono;
+      let database: typeof import("./db").db;
+      let schema: typeof import("./schema");
+
+      beforeAll(async () => {
+        const dbMod = await import("./db");
+        database = dbMod.db;
+        schema = await import("./schema");
+        const routesMod = await import("./routes");
+        const { Hono } = await import("hono");
+        const sub = new Hono();
+        sub.route("/", routesMod.default);
+        localApp = sub;
+      });
+
+      beforeEach(async () => {
+        // 子テーブルから順に削除（FK 整合性を明示）
+        await database.delete(schema.eventCustomAnswers);
+        await database.delete(schema.eventCustomQuestions);
+        await database.delete(schema.eventOptionResponses);
+        await database.delete(schema.eventResponses);
+        await database.delete(schema.eventOptions);
+        await database.delete(schema.events);
+      });
+
+      // 共通ヘルパ: 任意の deadline を持つイベント + 候補日時 1 件を seed する
+      const seedEventWithDeadline = async (input: {
+        id: string;
+        deadline: string | null;
+      }): Promise<{ id: string; optionId: number }> => {
+        await database.insert(schema.events).values({
+          id: input.id,
+          title: "新年会",
+          deadline: input.deadline,
+        });
+        const [opt] = await database
+          .insert(schema.eventOptions)
+          .values({
+            eventId: input.id,
+            label: "2026-01-10 19:00",
+            sortOrder: 0,
+          })
+          .returning({ id: schema.eventOptions.id });
+        return { id: input.id, optionId: opt!.id };
+      };
+
+      // 共通ヘルパ: 既存の参加者 1 件（候補回答「○」付き）を seed し responseId を返す
+      const seedResponse = async (input: {
+        eventId: string;
+        optionId: number;
+      }): Promise<number> => {
+        const [row] = await database
+          .insert(schema.eventResponses)
+          .values({ eventId: input.eventId, name: "山田太郎" })
+          .returning({ id: schema.eventResponses.id });
+        await database.insert(schema.eventOptionResponses).values({
+          responseId: row.id,
+          optionId: input.optionId,
+          answer: "○",
+        });
+        return row.id;
+      };
+
+      // 共通ヘルパ: 既存回答を「×」へ書き換える有効な PUT リクエストを組み立てる
+      const buildValidUpdateRequest = (
+        eventId: string,
+        responseId: number,
+        optionId: number,
+      ): Request => {
+        const params = new URLSearchParams();
+        params.append("name", "山田太郎");
+        params.append(`answers[${optionId}]`, "×");
+        return new Request(`http://localhost:8787/events/${eventId}/responses/${responseId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: params.toString(),
+        });
+      };
+
+      it("締め切りが過去のイベントの既存回答へ有効な更新を送っても 422 を返す", async () => {
+        // Arrange: 締め切りが過去のイベントと既存回答を投入する
+        const seeded = await seedEventWithDeadline({
+          id: "evt-deadline-put-past",
+          deadline: "2020-01-01T00:00",
+        });
+        const responseId = await seedResponse({
+          eventId: seeded.id,
+          optionId: seeded.optionId,
+        });
+
+        // Act: 有効な更新フォームを送信する
+        const response = await localApp.fetch(
+          buildValidUpdateRequest(seeded.id, responseId, seeded.optionId),
+        );
+
+        // Assert: フォーム内容が有効でも締め切り超過によりサーバ側で拒否される
+        expect(response.status).toBe(422);
+      });
+      it("締め切りが過去のイベントへの更新では既存回答の値が変化しない（副作用なし）", async () => {
+        // Arrange: 締め切りが過去のイベントと既存回答（○）を投入する
+        const seeded = await seedEventWithDeadline({
+          id: "evt-deadline-put-past-noside",
+          deadline: "2020-01-01T00:00",
+        });
+        const responseId = await seedResponse({
+          eventId: seeded.id,
+          optionId: seeded.optionId,
+        });
+
+        // Act: 「×」へ書き換える有効な更新フォームを送信する
+        const response = await localApp.fetch(
+          buildValidUpdateRequest(seeded.id, responseId, seeded.optionId),
+        );
+
+        // Assert: 拒否（422）をガードしつつ、既存回答が seed 時の「○」のまま変化しないことを検証する
+        expect(response.status).toBe(422);
+        const rows = await database.select().from(schema.eventOptionResponses);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.answer).toBe("○");
+        const responses = await database.select().from(schema.eventResponses);
+        expect(responses[0]?.name).toBe("山田太郎");
+      });
+      it("締め切りが未来のイベントの既存回答は従来どおり更新できる", async () => {
+        // Arrange: 締め切りが未来のイベントと既存回答（○）を投入する
+        const seeded = await seedEventWithDeadline({
+          id: "evt-deadline-put-future",
+          deadline: "2999-12-31T23:59",
+        });
+        const responseId = await seedResponse({
+          eventId: seeded.id,
+          optionId: seeded.optionId,
+        });
+
+        // Act: 「×」へ書き換える有効な更新フォームを送信する
+        const response = await localApp.fetch(
+          buildValidUpdateRequest(seeded.id, responseId, seeded.optionId),
+        );
+
+        // Assert: 成功（200）し、既存回答が「×」へ更新されている
+        expect(response.status).toBe(200);
+        const rows = await database.select().from(schema.eventOptionResponses);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]?.answer).toBe("×");
+      });
+    });
+
+    describe("GET /events/:id — 回答締め切りの表示", () => {
+      // 兄弟 describe と同じ規約（動的 import + 子から順 truncate）。変数は共有できないため再宣言する。
+      let localApp: Hono;
+      let database: typeof import("./db").db;
+      let schema: typeof import("./schema");
+
+      beforeAll(async () => {
+        const dbMod = await import("./db");
+        database = dbMod.db;
+        schema = await import("./schema");
+        const routesMod = await import("./routes");
+        const { Hono } = await import("hono");
+        const sub = new Hono();
+        sub.route("/", routesMod.default);
+        localApp = sub;
+      });
+
+      beforeEach(async () => {
+        // 子テーブルから順に削除（FK 整合性を明示）
+        await database.delete(schema.eventCustomAnswers);
+        await database.delete(schema.eventCustomQuestions);
+        await database.delete(schema.eventOptionResponses);
+        await database.delete(schema.eventResponses);
+        await database.delete(schema.eventOptions);
+        await database.delete(schema.events);
+      });
+
+      // 共通ヘルパ: 任意の deadline を持つイベント + 候補日時 1 件を seed する（兄弟 describe と同形式）
+      const seedEventWithDeadline = async (input: {
+        id: string;
+        deadline: string | null;
+      }): Promise<{ id: string; optionId: number }> => {
+        await database.insert(schema.events).values({
+          id: input.id,
+          title: "新年会",
+          deadline: input.deadline,
+        });
+        const [opt] = await database
+          .insert(schema.eventOptions)
+          .values({
+            eventId: input.id,
+            label: "2026-01-10 19:00",
+            sortOrder: 0,
+          })
+          .returning({ id: schema.eventOptions.id });
+        return { id: input.id, optionId: opt!.id };
+      };
+
+      it("deadline が設定されたイベントの詳細ページには「回答締め切り」ラベルと、候補日時と同じ「YYYY/MM/DD (曜日) HH:mm」形式に整形した締め切り日時が表示される", async () => {
+        // Arrange: deadline 付きのイベントを投入する
+        const seeded = await seedEventWithDeadline({
+          id: "evt-deadline-detail-show",
+          deadline: "2026-06-30T18:00",
+        });
+
+        // Act: イベント詳細ページを取得する
+        const response = await localApp.fetch(
+          new Request(`http://localhost:8787/events/${seeded.id}`),
+        );
+        const body = await response.text();
+
+        // Assert: ラベルと整形済みの締め切り日時が本文に含まれる（タグ構造には依存しない）
+        expect(response.status).toBe(200);
+        expect(body).toContain("回答締め切り");
+        expect(body).toContain("2026/06/30 (火) 18:00");
+      });
+      it("deadline が null のイベントの詳細ページには「回答締め切り」ラベルが本文に含まれない（セクションごと非表示）", async () => {
+        // Arrange: deadline なし（null）のイベントを投入する
+        const seeded = await seedEventWithDeadline({
+          id: "evt-deadline-detail-hide",
+          deadline: null,
+        });
+
+        // Act: イベント詳細ページを取得する
+        const response = await localApp.fetch(
+          new Request(`http://localhost:8787/events/${seeded.id}`),
+        );
+        const body = await response.text();
+
+        // Assert: ページ自体は表示され、「回答締め切り」セクションは本文に現れない
+        expect(response.status).toBe(200);
+        expect(body).not.toContain("回答締め切り");
+      });
     });
   });
 });

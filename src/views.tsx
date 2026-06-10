@@ -1,5 +1,6 @@
 import type { Child, FC } from "hono/jsx";
 import type { PersistedCard } from "./db";
+import { isDeadlinePassed } from "./deadline";
 import type { Event, EventCustomQuestion, EventOption, EventResponse } from "./schema";
 
 export type Theme = "dark" | "light";
@@ -117,6 +118,7 @@ export type EventNewFormValues = {
   customQuestion?: string;
   customQuestions?: string[];
   description?: string;
+  deadline?: string;
 };
 
 export type EventNewFormErrors = string[];
@@ -129,6 +131,7 @@ export const EventNewForm: FC<{
   const customQuestionValue = values?.customQuestion ?? "";
   const descriptionValue = values?.description ?? "";
   const customQuestionsValues = values?.customQuestions ?? [];
+  const deadlineValue = values?.deadline ?? "";
   const [firstOption = "", ...extraOptions] = values?.options ?? [];
 
   return (
@@ -191,6 +194,11 @@ export const EventNewForm: FC<{
           候補を追加
         </button>
       </fieldset>
+
+      <label>
+        回答締め切り（任意）
+        <input type="datetime-local" name="deadline" value={deadlineValue} />
+      </label>
 
       {/*
         旧仕様（events.custom_question 単数カラム）の入力。
@@ -460,6 +468,14 @@ export const EventPage: FC<{
           ))}
         </ul>
       </section>
+      {event.deadline !== null && event.deadline !== undefined ? (
+        <section style="margin-bottom: 1rem;">
+          <small style="color: var(--pico-muted-color); display: block; font-size: 0.875em;">
+            回答締め切り
+          </small>
+          <p style="margin-top: 0.375rem; margin-bottom: 0;">{formatOptionLabel(event.deadline)}</p>
+        </section>
+      ) : null}
       {/*
         旧仕様（events.custom_question 単数）の設問ヘッダー表示は廃止。
         設問は新仕様（event_custom_questions テーブル）から fieldset 内に表示される。
@@ -520,6 +536,7 @@ export const ResponseFormRow: FC<{
   const answerChoices: Answer[] = ["○", "△", "×"];
 
   const isEdit = mode === "edit" && responseId !== undefined;
+  const isClosed = isDeadlinePassed(event.deadline);
 
   // 編集モード時のテーブル列数: 名前 + 候補数 + 新仕様設問数 + (旧仕様カスタム回答?) + コメント + 操作
   const editColspan =
@@ -554,7 +571,14 @@ export const ResponseFormRow: FC<{
 
       <label>
         名前
-        <input type="text" name="name" required maxlength={100} value={nameValue} />
+        <input
+          type="text"
+          name="name"
+          required
+          maxlength={100}
+          value={nameValue}
+          disabled={isClosed}
+        />
       </label>
 
       {options.map((option) => (
@@ -569,6 +593,7 @@ export const ResponseFormRow: FC<{
                   value={choice}
                   required
                   checked={answersValue[String(option.id)] === choice}
+                  disabled={isClosed}
                   style="margin:0;"
                 />
                 {choice}
@@ -592,6 +617,7 @@ export const ResponseFormRow: FC<{
             maxlength={500}
             value={customAnswerValue}
             tabindex={-1}
+            disabled={isClosed}
           />
         </label>
       ) : null}
@@ -608,6 +634,7 @@ export const ResponseFormRow: FC<{
                 maxlength={500}
                 placeholder="自由記入"
                 value={customAnswersValue[String(q.id)] ?? ""}
+                disabled={isClosed}
               />
             </label>
           ))}
@@ -616,13 +643,21 @@ export const ResponseFormRow: FC<{
 
       <label>
         コメント（任意）
-        <textarea name="comment" maxlength={500} rows={3} placeholder="補足やメッセージなど">
+        <textarea
+          name="comment"
+          maxlength={500}
+          rows={3}
+          placeholder="補足やメッセージなど"
+          disabled={isClosed}
+        >
           {commentValue}
         </textarea>
       </label>
 
       <div role="group">
-        <button type="submit">{mode === "edit" ? "更新する" : "回答する"}</button>
+        <button type="submit" disabled={isClosed}>
+          {mode === "edit" ? "更新する" : "回答する"}
+        </button>
         {isEdit ? (
           <button
             type="button"
