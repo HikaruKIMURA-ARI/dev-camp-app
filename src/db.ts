@@ -340,6 +340,25 @@ export const getResponseById = async (responseId: number): Promise<EventResponse
   return row ?? null;
 };
 
+export const getCardByResponseId = async (responseId: number): Promise<PersistedCard | null> => {
+  const [row] = await db
+    .select()
+    .from(participantCards)
+    .where(eq(participantCards.responseId, responseId));
+  if (!row) return null;
+  return {
+    responseId: row.responseId,
+    title: row.title,
+    rarity: row.rarity,
+    attribute: row.attribute,
+    race: row.race,
+    flavor: row.flavor,
+    attack: row.attack,
+    defense: row.defense,
+    tier: row.tier,
+  };
+};
+
 export const updateResponse = async (
   _eventId: string,
   responseId: number,
