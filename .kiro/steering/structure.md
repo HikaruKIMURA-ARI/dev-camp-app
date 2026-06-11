@@ -4,7 +4,7 @@
 
 **フラットなレイヤー分割**。アプリ規模が小さいので、`src/` 直下にレイヤー単位（アプリ組み立て / ルート / ビュー / DB / スキーマ / テスト）でファイルを並べるだけに留めている。サブディレクトリで階層を切るのは、ファイル数が増えて 1 ファイル 1 責務では収まらなくなった時点でから。
 
-機能（feature）単位でディレクトリを切らない。ルーティングは `src/routes.tsx` 1 箇所に集約されており、ルート → ビュー → DB の依存方向が一方向で見通せる規模を維持する。`src/index.tsx` は「サブアプリのマウント / 静的アセット配信 / テーマ Cookie」だけを担う薄いシェル。
+機能（feature）単位でディレクトリを切らない。ルーティングは `src/routes.tsx` 1 箇所に集約されており、ルート → ビュー → DB の依存方向が一方向で見通せる規模を維持する。アプリ本体は `src/app.ts` の薄いシェル（サブアプリのマウント / テーマ Cookie）に集約し、`src/index.tsx`（Bun）と `src/worker.ts`（Cloudflare Workers）はランタイム差分だけを持つエントリポイント。
 
 ## Directory Patterns
 
@@ -13,12 +13,17 @@
 **Location**: `/src/`
 **Purpose**: 実行されるアプリケーションコード。レイヤー単位のファイルが並ぶ。
 
-- `index.tsx` — アプリの組み立て（`app.route("/", routes)`）、静的アセットの `serveStatic`、`POST /theme`（Cookie 更新 + `HX-Refresh`）。`{ port, fetch }` を default export し、Bun が消費する
+- `app.ts` — アプリ本体の組み立て（`new Hono()` + `app.route("/", routes)`）、`POST /theme`（Cookie 更新 + `HX-Refresh`）、Gemini 起動時疎通チェック。ランタイム非依存に保つ
+- `index.tsx` — **Bun エントリ**。`app.ts` を import し、`public/static/` の `serveStatic` を足して `{ port, fetch }` を default export する
+- `worker.ts` — **Cloudflare Workers エントリ**。`app.ts` をそのまま default export するだけ（静的アセットは wrangler の `[assets]` が配信）
 - `routes.tsx` — Hono サブアプリ（`new Hono()`）。`/`, `/events/new`, `POST /events`, `/events/:id`, `POST /events/:id/responses`, `GET /events/:id/responses/:responseId/edit`, `PUT /events/:id/responses/:responseId` 等、ドメインルートはすべてここに集約する
-- `views.tsx` — JSX コンポーネント（`Layout` / `EventNewForm` / `EventPage` / `ResponsesTable` / `ResponseFormRow` / `NotFoundPage` 等）。HTML を返すための表現層
-- `db.ts` — Drizzle クライアントの生成、起動時マイグレーション、データアクセス関数（`createEvent` / `getEventWithOptions` / `addResponse` / `getResponseById` / `updateResponse`）と関連型（`Answer` / `AggregateCounts` / `EventWithOptions` / `ResponseInput`）
-- `schema.ts` — Drizzle のテーブル定義（`events` / `eventOptions` / `eventResponses` / `eventOptionResponses` / `slackWebhooks`）と型エクスポート。`Event = typeof events.$inferSelect` のように **スキーマから型を導出**する
-- `routes.test.ts` — `bun:test` の単体・統合テスト。レイヤー単位の `*.test.ts` を同階層に置く（`routes.test.ts` ↔ `routes.tsx`）。`bunfig.toml` の `[test] root = "src"` により `bun test` の対象はこのディレクトリだけ
+- `views.tsx` — JSX コンポーネント（`Layout` / `EventNewForm` / `EventPage` / `ResponsesTable` / `ResponseFormRow` / `CardsCarousel` / `NotFoundPage` 等）。HTML を返すための表現層
+- `db.ts` — Drizzle クライアントの生成、起動時マイグレーション（`SKIP_DB_MIGRATE=1` でスキップ）、データアクセス関数（`createEvent` / `getEventWithOptions` / `addResponse` / `addResponseWithCard` / `getResponseById` / `updateResponse`）と関連型（`Answer` / `AggregateCounts` / `CardAttributes` / `Tier` 等）
+- `schema.ts` — Drizzle のテーブル定義（`events` / `eventOptions` / `eventResponses` / `eventOptionResponses` / `eventCustomQuestions` / `eventCustomAnswers` / `participantCards` / `slackWebhooks`）と型エクスポート。`Event = typeof events.$inferSelect` のように **スキーマから型を導出**する
+- `gemini.ts` — Gemini API クライアント（プロセス外依存）。`CardGenerator` インターフェイスでラップし、エラーを分類して投げる
+- `cards.ts` — カード生成のドメインロジック（AI 出力のサニタイズ、Tier フォールバック、`addResponseWithCard` への橋渡し）
+- `deadline.ts` — 締め切り判定の純粋関数（`isDeadlinePassed`）
+- `*.test.ts` — `bun:test` の単体・統合テスト。レイヤー単位で同階層に置く（`routes.test.ts` ↔ `routes.tsx`、`cards.test.ts` ↔ `cards.ts` 等）。`bunfig.toml` の `[test] root = "src"` により `bun test` の対象はこのディレクトリだけ
 
 ### Migrations
 
@@ -29,8 +34,8 @@
 ### Static Assets
 
 **Location**: `/public/`
-**Purpose**: プロジェクト固有の静的アセット（現状は `app.css` のみで、pico の上から最小限の上書きを行う）。
-**Note**: pico.css と htmx / Alpine.js は `node_modules` から `serveStatic` で配信する。`/public/` にコピーしない。
+**Purpose**: プロジェクト固有の静的アセット（`app.css`、`favicon.svg`）と配信用ディレクトリ `public/static/`。
+**Rule**: `public/static/` は `prepare:assets` スクリプトの生成物（htmx / Alpine / pico / app.css のコピー）なので直接編集しない。`app.css` を変更する場合は `public/app.css` を編集する（`prepare:assets` がコピーする）。Bun では `serveStatic`、Workers では wrangler の `[assets] directory = "./public"` が配信する。
 
 ### E2E Tests
 
@@ -76,13 +81,19 @@ import { EventPage, Layout } from "./views";
 ### 依存方向
 
 ```
-index.tsx ──▶ routes.tsx ──▶ views.tsx
-                  │              │
-                  ▼              ▼
-                db.ts ──────▶ schema.ts
+index.tsx (Bun) ─┐
+                 ├─▶ app.ts ──▶ routes.tsx ──▶ views.tsx
+worker.ts (CF) ──┘                 │              │
+                                   ▼              ▼
+                  cards.ts ──▶  db.ts ──────▶ schema.ts
+                     │
+                     ▼
+                 gemini.ts（プロセス外: Gemini API）
 ```
 
-- `index.tsx` はアプリ組み立てと静的配信に専念し、ドメインロジックを直接書かない（`POST /theme` のような薄い横断ハンドラだけは例外）
+- `index.tsx` / `worker.ts` はランタイム固有の差分（静的配信・port）だけを書き、ドメインロジックを直接書かない
+- `app.ts` はアプリ組み立てに専念する（`POST /theme` のような薄い横断ハンドラだけは例外）
+- `routes.tsx` は cards / deadline / db / views を使ってよい。`gemini.ts` を直接呼ばず、`cards.ts` を経由する
 - `routes.tsx` は views と db を使ってよい。ハンドラごとに 1 つのユースケースだけを表現する
 - views (`views.tsx`) は **schema の型のみ** を import する。db や Hono の `Context` を import しない（プレゼンテーションを純粋に保つ）
 - db (`db.ts`) は schema のみに依存する。views や Hono を知らない

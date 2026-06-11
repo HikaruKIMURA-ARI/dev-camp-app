@@ -55,7 +55,7 @@ const RARITY_STARS: Record<string, number> = {
   N: 0,
 };
 
-const CardView: FC<{ card: PersistedCard }> = ({ card }) => {
+export const CardView: FC<{ card: PersistedCard }> = ({ card }) => {
   const rarity = card.rarity.toLowerCase();
   const emoji = RACE_EMOJI[card.race] ?? "✨";
   const attrClass = ATTRIBUTE_CLASS[card.attribute] ?? "yc-attr-none";
@@ -95,6 +95,15 @@ const CardView: FC<{ card: PersistedCard }> = ({ card }) => {
   );
 };
 
+export const CardPrintPage: FC<{ card: PersistedCard }> = ({ card }) => (
+  <div class="card-print-page">
+    <CardView card={card} />
+    <button type="button" class="card-print-button secondary" onclick="window.print()">
+      PDF で保存
+    </button>
+  </div>
+);
+
 export const CardsCarousel: FC<{
   responses: ResponseWithAnswers[];
   oob?: boolean;
@@ -102,7 +111,17 @@ export const CardsCarousel: FC<{
   <div id="cards" class="cards-carousel" {...(oob ? { "hx-swap-oob": "true" } : {})}>
     {responses.map((r) =>
       r.card ? (
-        <CardView card={r.card} />
+        <div class="card-cell">
+          <CardView card={r.card} />
+          <a
+            class="card-pdf-link secondary"
+            href={`/events/${r.eventId}/responses/${r.id}/card`}
+            target="_blank"
+            rel="noopener"
+          >
+            保存
+          </a>
+        </div>
       ) : (
         <article class="yc-pending" aria-label={r.name}>
           カードを生成中…

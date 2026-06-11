@@ -5,6 +5,7 @@ import { cardService } from "./cards";
 import {
   type Answer,
   createEvent,
+  getCardByResponseId,
   getEventWithOptions,
   getResponseById,
   updateResponse,
@@ -12,6 +13,7 @@ import {
 import { isDeadlinePassed } from "./deadline";
 import {
   CardsCarousel,
+  CardPrintPage,
   EventNewForm,
   type EventNewFormValues,
   EventPage,
@@ -26,6 +28,16 @@ const readTheme = (c: Context): Theme | undefined => {
   const v = getCookie(c, "theme");
   return v === "dark" || v === "light" ? v : undefined;
 };
+
+// フルページとして 404 を返すルート（GET のページ系）向けの共通レンダラ。
+// htmx フラグメントを返すルートでは従来どおり `c.notFound()` を使う。
+const renderNotFoundPage = (c: Context, message: string) =>
+  c.html(
+    <Layout theme={readTheme(c)}>
+      <NotFoundPage message={message} />
+    </Layout>,
+    404,
+  );
 
 const routes = new Hono();
 
@@ -139,12 +151,7 @@ routes.get("/events/:id", async (c) => {
   const data = await getEventWithOptions(id);
 
   if (!data) {
-    return c.html(
-      <Layout theme={readTheme(c)}>
-        <NotFoundPage message="イベントが見つかりません" />
-      </Layout>,
-      404,
-    );
+    return renderNotFoundPage(c, "イベントが見つかりません");
   }
 
   return c.html(
@@ -324,6 +331,32 @@ routes.post("/events/:id/responses", async (c) => {
   await cardService.generateAndPersist(id, validated.data);
 
   return renderResponseSubmissionFragment(c, id);
+});
+
+routes.get("/events/:id/responses/:responseId/card", async (c) => {
+  const eventId = c.req.param("id");
+  const responseId = Number(c.req.param("responseId"));
+
+  const data = await getEventWithOptions(eventId);
+  if (!data) {
+    return renderNotFoundPage(c, "イベントが見つかりません");
+  }
+
+  const responseRow = await getResponseById(responseId);
+  if (!responseRow || responseRow.eventId !== eventId) {
+    return renderNotFoundPage(c, "カードが見つかりません");
+  }
+
+  const card = await getCardByResponseId(responseId);
+  if (!card) {
+    return renderNotFoundPage(c, "カードが見つかりません");
+  }
+
+  return c.html(
+    <Layout theme={readTheme(c)}>
+      <CardPrintPage card={card} />
+    </Layout>,
+  );
 });
 
 routes.get("/events/:id/responses/:responseId/edit", async (c) => {

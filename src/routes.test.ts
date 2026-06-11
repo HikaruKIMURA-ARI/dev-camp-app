@@ -7100,4 +7100,446 @@ describe("routes (Hono sub-app) mounted on app", () => {
       });
     });
   });
+
+  /**
+   * 新仕様（参加者カードの PDF 保存）に関するテストケースを列挙する。
+   *
+   * 対象の振る舞い:
+   *  - GET /events/:id/responses/:responseId/card が対象カード 1 枚だけの印刷用フルページを返す
+   *  - カードの 7 属性（title / rarity / attribute / race / flavor / attack / defense）が表示される
+   *  - window.print() を呼ぶ「PDF で保存」ボタンが含まれる
+   *  - イベント不在 / 回答不在 / 別イベントの回答 / カード未生成のとき 404
+   *  - GET /events/:id のカルーセル内で各カードに印刷ページへの <a> リンクが付く
+   *
+   * スコープ外:
+   *  - @media print によるボタン非表示（CSS は単体テスト対象外。要件に明記）
+   *  - 実際の印刷ダイアログ・PDF 生成（ブラウザ機能のため E2E でも観測しない）
+   *  - カード属性値の生成ロジック（Task 3.1 の participant_cards 生成側で検証済み）
+   *  - カルーセルの件数・並び順・レアリティ class（Task 3.2 で検証済み。ここではリンクの有無のみ）
+   *
+   * 備考:
+   *  - Bun の `it.todo` は `fn` 引数が必須のため、本ファイルでは `() => {}` を渡している。
+   *    Phase 3（RED）で本体実装に置き換える。
+   */
+  describe("新仕様: 参加者カードの PDF 保存（印刷用カードページ）", () => {
+    // 既存 Task 2.2 / 3.x と同じく、:memory: SQLite に向けた状態で動的 import する。
+    // `beforeEach` で全テーブルを子から順に truncate して、ケース間の隔離を確保する。
+    let localApp: Hono;
+    let database: typeof import("./db").db;
+    let schema: typeof import("./schema");
+    let dbMod: typeof import("./db");
+
+    beforeAll(async () => {
+      dbMod = await import("./db");
+      database = dbMod.db;
+      schema = await import("./schema");
+      const routesMod = await import("./routes");
+      const { Hono } = await import("hono");
+      const sub = new Hono();
+      sub.route("/", routesMod.default);
+      localApp = sub;
+    });
+
+    beforeEach(async () => {
+      // 子テーブルから順に削除（FK cascade に頼らず明示）
+      await database.delete(schema.participantCards);
+      await database.delete(schema.eventOptionResponses);
+      await database.delete(schema.eventResponses);
+      await database.delete(schema.eventOptions);
+      await database.delete(schema.events);
+    });
+
+    // 共通ヘルパ: イベントと候補日時を作る（既存 describe の seedEvent と同じ規約）
+    const seedEvent = async (input: {
+      id: string;
+      title: string;
+      options: string[];
+    }): Promise<{ id: string; optionIds: number[] }> => {
+      await database.insert(schema.events).values({
+        id: input.id,
+        title: input.title,
+        customQuestion: null,
+      });
+      const inserted = await database
+        .insert(schema.eventOptions)
+        .values(
+          input.options.map((label, index) => ({
+            eventId: input.id,
+            label,
+            sortOrder: index,
+          })),
+        )
+        .returning({ id: schema.eventOptions.id });
+      return { id: input.id, optionIds: inserted.map((r) => r.id) };
+    };
+
+    // 共通 Arrange — カード付き回答を 1 件 seed（`addResponseWithCard` で participant_cards に 1:1 で行を作る）。
+    // 7 属性の値は本文中で偶然一致しない判別可能な値にする
+    // （rarity は 1 文字の "R" だと偶然の一致でパスし得るため "UR"、attack / defense も他と紛れない数値を使う）
+    let responseId: number;
+
+    beforeEach(async () => {
+      const seeded = await seedEvent({
+        id: "evt-card-print",
+        title: "新年会",
+        options: ["2026-01-10 19:00"],
+      });
+      const [opt] = seeded.optionIds;
+      const result = await dbMod.addResponseWithCard("evt-card-print", {
+        response: {
+          name: "山田太郎",
+          answers: { [String(opt!)]: "○" },
+        },
+        card: {
+          title: "勇者ヤマダ",
+          rarity: "UR",
+          attribute: "火",
+          race: "戦士",
+          flavor: "テストフレーバー",
+          attack: 2345,
+          defense: 6789,
+          tier: "default",
+        },
+      });
+      responseId = result.responseId;
+    });
+
+    // 印刷用ページは対象回答のカード 1 枚だけを表示するフルページとして返る
+    describe("GET /events/:id/responses/:responseId/card — カードが存在する回答に対して印刷用フルページを返す", () => {
+      it("カードが生成済みの responseId に対する GET は 200 を返す", async () => {
+        // Act
+        const response = await localApp.fetch(
+          new Request(`http://localhost:8787/events/evt-card-print/responses/${responseId}/card`),
+        );
+
+        // Assert
+        expect(response.status).toBe(200);
+      });
+      it("カードが生成済みの responseId へのレスポンスは Content-Type に text/html を含む", async () => {
+        // Act
+        const response = await localApp.fetch(
+          new Request(`http://localhost:8787/events/evt-card-print/responses/${responseId}/card`),
+        );
+
+        // Assert
+        expect(response.headers.get("Content-Type")).toContain("text/html");
+      });
+      it("レスポンス本文は <html を含むフルページである（htmx フラグメントではない）", async () => {
+        // Act
+        const response = await localApp.fetch(
+          new Request(`http://localhost:8787/events/evt-card-print/responses/${responseId}/card`),
+        );
+
+        // Assert
+        const body = await response.text();
+        expect(body).toContain("<html");
+      });
+      describe("同一イベントに複数の回答とカードがあるとき", () => {
+        // Arrange — 外側の beforeEach の seed（勇者ヤマダ）に加えて、
+        // 判別可能な別 title のカード付き回答を同一イベントにもう 1 件追加する
+        beforeEach(async () => {
+          const [opt] = await database
+            .select({ id: schema.eventOptions.id })
+            .from(schema.eventOptions);
+          await dbMod.addResponseWithCard("evt-card-print", {
+            response: {
+              name: "鈴木花子",
+              answers: { [String(opt!.id)]: "×" },
+            },
+            card: {
+              title: "魔王スズキ",
+              rarity: "SR",
+              attribute: "闇",
+              race: "魔法使い",
+              flavor: "別の回答のカード",
+              attack: 1200,
+              defense: 900,
+              tier: "default",
+            },
+          });
+        });
+
+        it("本文には対象 responseId のカードの title のみが含まれ、他の回答のカードの title は含まれない（カード 1 枚だけの表示）", async () => {
+          // Act
+          const response = await localApp.fetch(
+            new Request(`http://localhost:8787/events/evt-card-print/responses/${responseId}/card`),
+          );
+
+          // Assert — 対象カードの title だけが描画される
+          const body = await response.text();
+          expect(body).toContain("勇者ヤマダ");
+          expect(body).not.toContain("魔王スズキ");
+        });
+      });
+    });
+
+    // カードの属性が印刷物の内容としてすべて表示される
+    describe("GET /events/:id/responses/:responseId/card — カードの 7 属性が表示される", () => {
+      it("本文に対象カードの 7 属性（title / rarity / attribute / race / flavor / attack / defense）の値がすべて含まれる", async () => {
+        // Act
+        const response = await localApp.fetch(
+          new Request(`http://localhost:8787/events/evt-card-print/responses/${responseId}/card`),
+        );
+
+        // Assert — 共通 Arrange で seed した判別可能な 7 属性値がすべて本文に描画される
+        const body = await response.text();
+        expect(body).toContain("勇者ヤマダ"); // title
+        expect(body).toContain("UR"); // rarity
+        expect(body).toContain("火"); // attribute
+        expect(body).toContain("戦士"); // race
+        expect(body).toContain("テストフレーバー"); // flavor
+        expect(body).toContain("2345"); // attack
+        expect(body).toContain("6789"); // defense
+      });
+    });
+
+    // 画面から window.print() を起動できる導線がページ内に含まれる
+    describe("GET /events/:id/responses/:responseId/card — 「PDF で保存」ボタン", () => {
+      it("本文に window.print() を呼び出す「PDF で保存」ボタンが含まれる", async () => {
+        // Act
+        const response = await localApp.fetch(
+          new Request(`http://localhost:8787/events/evt-card-print/responses/${responseId}/card`),
+        );
+
+        // Assert — 起動方式（onclick / Alpine 等）には依存せず、
+        // 「window.print() を呼ぶ記述」と「PDF で保存」ラベルの 2 点（要件）のみを観測する
+        const body = await response.text();
+        expect(body).toContain("window.print()");
+        expect(body).toContain("PDF で保存");
+      });
+      // @media print でのボタン非表示は CSS のため単体テスト対象外（要件に明記）
+    });
+
+    // 不正な URL の組み合わせはすべて 404（既存の NotFoundPage フルページ規約に従う）
+    describe("GET /events/:id/responses/:responseId/card — 不在 / 不一致 / カード未生成のとき 404", () => {
+      it("存在しないイベント ID に対する GET は 404 を返す", async () => {
+        // Act — 実在する responseId でも、イベント ID が存在しなければ 404 になる
+        const response = await localApp.fetch(
+          new Request(`http://localhost:8787/events/evt-nonexistent/responses/${responseId}/card`),
+        );
+
+        // Assert
+        expect(response.status).toBe(404);
+      });
+      it("存在しない responseId に対する GET は 404 を返す", async () => {
+        // Act — イベント（evt-card-print）は実在するが、responseId が存在しなければ 404 になる
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-card-print/responses/999999/card"),
+        );
+
+        // Assert
+        expect(response.status).toBe(404);
+      });
+      describe("responseId が別イベントに属するとき", () => {
+        // Arrange — 既存 edit / PUT の「別イベント所属 404」と同じ流儀で、
+        // 別イベント（evt-card-print-other）を作成し、そのイベントにカード付き回答を seed する
+        let otherEventResponseId: number;
+
+        beforeEach(async () => {
+          const seeded = await seedEvent({
+            id: "evt-card-print-other",
+            title: "忘年会",
+            options: ["2026-02-10 19:00"],
+          });
+          const [opt] = seeded.optionIds;
+          const result = await dbMod.addResponseWithCard("evt-card-print-other", {
+            response: {
+              name: "佐藤次郎",
+              answers: { [String(opt!)]: "○" },
+            },
+            card: {
+              title: "騎士サトウ",
+              rarity: "SR",
+              attribute: "水",
+              race: "騎士",
+              flavor: "別イベントのカード",
+              attack: 1111,
+              defense: 2222,
+              tier: "default",
+            },
+          });
+          otherEventResponseId = result.responseId;
+        });
+
+        it("イベントは存在するが responseId が別イベントに属するとき GET は 404 を返す", async () => {
+          // Act — 実在するイベント（evt-card-print）の URL に、別イベントの responseId を渡す
+          const response = await localApp.fetch(
+            new Request(
+              `http://localhost:8787/events/evt-card-print/responses/${otherEventResponseId}/card`,
+            ),
+          );
+
+          // Assert
+          expect(response.status).toBe(404);
+        });
+      });
+      describe("回答は存在するがカードが未生成のとき", () => {
+        // Arrange — 同一イベント（evt-card-print）に、カードを生成しない `addResponse` で回答を seed する。
+        // `addResponse` は participant_cards に行を作らないため「回答あり・カードなし」の状態を再現できる
+        let cardlessResponseId: number;
+
+        beforeEach(async () => {
+          const [opt] = await database
+            .select({ id: schema.eventOptions.id })
+            .from(schema.eventOptions);
+          const result = await dbMod.addResponse("evt-card-print", {
+            name: "高橋三郎",
+            answers: { [String(opt!.id)]: "△" },
+            customAnswer: null,
+          });
+          cardlessResponseId = result.responseId;
+        });
+
+        it("回答は存在するがカードが未生成のとき GET は 404 を返す", async () => {
+          // Act — 実在するイベント・実在する回答だが、カードが紐づいていない responseId を渡す
+          const response = await localApp.fetch(
+            new Request(
+              `http://localhost:8787/events/evt-card-print/responses/${cardlessResponseId}/card`,
+            ),
+          );
+
+          // Assert
+          expect(response.status).toBe(404);
+        });
+      });
+      it("存在しないイベント ID への 404 のレスポンス本文は <html を含むフルページである", async () => {
+        // Act — 実在する responseId でも、イベント ID が存在しなければ 404 フルページが返る
+        const response = await localApp.fetch(
+          new Request(`http://localhost:8787/events/evt-nonexistent/responses/${responseId}/card`),
+        );
+
+        // Assert — 既存の NotFoundPage 規約どおり、htmx フラグメントではなくフルページであること
+        const body = await response.text();
+        expect(body).toContain("<html");
+      });
+    });
+
+    // 仕様変更の明文化: 印刷用ページでもテーマ cookie が反映される。
+    // 既存のテーマ切り替えテスト（/events/new）は cookie → data-theme の対応自体を検証済みのため、
+    // ここでは「このルートにテーマが配線されていること」のリグレッション保護として dark の 1 ケースに絞る
+    describe("GET /events/:id/responses/:responseId/card — テーマ cookie が反映される", () => {
+      it('cookie theme=dark を付けてカードが生成済みの responseId に GET すると <html data-theme="dark"> のフルページが描画される', async () => {
+        // Act — 既存テーマテスト（/events/new）と同じく cookie ヘッダ付きで GET する
+        const response = await localApp.fetch(
+          new Request(`http://localhost:8787/events/evt-card-print/responses/${responseId}/card`, {
+            headers: { cookie: "theme=dark" },
+          }),
+        );
+
+        // Assert — フルページの <html> に data-theme="dark" が配線されていること
+        const body = await response.text();
+        expect(body).toContain('data-theme="dark"');
+      });
+      // light の別ケースは /events/new の既存テーマテストでカバー済みのため置かない
+    });
+
+    // イベントページのカルーセルから印刷用ページへ遷移できる
+    describe("GET /events/:id — カルーセル内の各カードに印刷ページへのリンクが付く", () => {
+      // Arrange — 外側の beforeEach の seed（勇者ヤマダ / responseId）に加えて、
+      // 同一イベントにカード付き回答をもう 1 件追加し、2 件分の responseId でリンクを観測できるようにする
+      let secondResponseId: number;
+
+      beforeEach(async () => {
+        const [opt] = await database
+          .select({ id: schema.eventOptions.id })
+          .from(schema.eventOptions);
+        const result = await dbMod.addResponseWithCard("evt-card-print", {
+          response: {
+            name: "鈴木花子",
+            answers: { [String(opt!.id)]: "×" },
+          },
+          card: {
+            title: "魔王スズキ",
+            rarity: "SR",
+            attribute: "闇",
+            race: "魔法使い",
+            flavor: "2 枚目の回答のカード",
+            attack: 1200,
+            defense: 900,
+            tier: "default",
+          },
+        });
+        secondResponseId = result.responseId;
+      });
+
+      it("カードが生成済みの回答が複数あるとき、カルーセル内の各カードにそれぞれの responseId に対応する /events/:id/responses/:responseId/card を href に持つ <a> が描画される", async () => {
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-card-print"),
+        );
+
+        // Assert — 2 件の回答それぞれの印刷ページ URL を href に持つ <a> が本文に含まれる。
+        // <a> のマークアップ詳細（class 等）には依存せず、href の文字列照合のみで観測する
+        const body = await response.text();
+        expect(body).toContain(`href="/events/evt-card-print/responses/${responseId}/card"`);
+        expect(body).toContain(`href="/events/evt-card-print/responses/${secondResponseId}/card"`);
+      });
+      // 単一カードでのリンク表示は複数カードのケースに包含されるため、別ケースは置かない
+
+      // 仕様変更: リンク文言を「PDF」から「保存」に変更する。
+      // 既存ケースは href のみを観測しているため文言変更の影響を受けない。文言はこのケースで固定する。
+      // なお印刷ページ内の「PDF で保存」ボタンは変更対象外（既存テストが文言を固定済み）
+      it("カードが生成済みの回答があるとき、印刷ページへのリンクの文言は「保存」である", async () => {
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-card-print"),
+        );
+
+        // Assert — リンク文言が「保存」であること。<a> のマークアップ詳細（class・属性順）には
+        // 依存せず、終了タグ直前の文言（>保存</a>）と旧文言（>PDF<）の不在のみで観測する
+        const body = await response.text();
+        expect(body).toContain(">保存</a>");
+        expect(body).not.toContain(">PDF<");
+      });
+      // 仕様変更: 保存リンクは別タブで開く。実際にタブが開く挙動はブラウザ機能のためここでは観測せず、
+      // target="_blank" 属性の描画のみを観測する。rel="noopener" の併用は実装判断のため観測しない
+      it('カードが生成済みの回答があるとき、印刷ページへのリンクに target="_blank" が付与される', async () => {
+        // Act
+        const response = await localApp.fetch(
+          new Request("http://localhost:8787/events/evt-card-print"),
+        );
+
+        // Assert — 保存リンク（印刷ページ URL を href に持つ <a>）の開始タグに target="_blank" が
+        // 含まれること。属性の並び順には依存せず、同一の <a> タグ内に href と target が
+        // 共存することだけを観測する（class 等のその他の属性には依存しない）
+        const body = await response.text();
+        const openingTag = body.match(
+          new RegExp(`<a\\b[^>]*href="/events/evt-card-print/responses/${responseId}/card"[^>]*>`),
+        )?.[0];
+        expect(openingTag).toBeDefined();
+        expect(openingTag).toContain('target="_blank"');
+      });
+      describe("カードが未生成（フォールバック表示）の回答があるとき", () => {
+        // Arrange — 同一イベント（evt-card-print）に、カードを生成しない `addResponse` で回答を seed する。
+        // `addResponse` は participant_cards に行を作らないため「回答あり・カードなし」の状態を再現できる
+        let cardlessResponseId: number;
+
+        beforeEach(async () => {
+          const [opt] = await database
+            .select({ id: schema.eventOptions.id })
+            .from(schema.eventOptions);
+          const result = await dbMod.addResponse("evt-card-print", {
+            name: "田中四郎",
+            answers: { [String(opt!.id)]: "△" },
+            customAnswer: null,
+          });
+          cardlessResponseId = result.responseId;
+        });
+
+        it("カードが未生成（フォールバック表示）の回答には印刷ページへのリンクが描画されない", async () => {
+          // Act
+          const response = await localApp.fetch(
+            new Request("http://localhost:8787/events/evt-card-print"),
+          );
+
+          // Assert — カード未生成の responseId に対応する印刷ページ URL が本文に含まれないこと。
+          // href の文字列照合のみで観測し、フォールバック表示のマークアップ詳細には依存しない
+          const body = await response.text();
+          expect(body).not.toContain(
+            `href="/events/evt-card-print/responses/${cardlessResponseId}/card"`,
+          );
+        });
+      });
+    });
+  });
 });

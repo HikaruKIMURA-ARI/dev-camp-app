@@ -9,15 +9,15 @@
   scroll-snap-type: x mandatory;
 }
 
-#cards .card-rarity-ur,
-#cards .card-rarity-sr,
-#cards .card-rarity-r,
-#cards .card-rarity-n,
-#cards .card-rarity-other,
-#cards .yc-pending {
+:is(#cards, .card-print-page) .card-rarity-ur,
+:is(#cards, .card-print-page) .card-rarity-sr,
+:is(#cards, .card-print-page) .card-rarity-r,
+:is(#cards, .card-print-page) .card-rarity-n,
+:is(#cards, .card-print-page) .card-rarity-other,
+:is(#cards, .card-print-page) .yc-pending {
   flex: 0 0 220px;
   width: 220px;
-  height: 320px;
+  min-height: 320px;
   margin: 0;
   padding: 0;
   display: flex;
@@ -31,26 +31,26 @@
   position: relative;
 }
 
-#cards .card-rarity-ur {
+:is(#cards, .card-print-page) .card-rarity-ur {
   border-color: #d4af37;
   box-shadow:
     0 0 14px rgba(212, 175, 55, 0.6),
     0 2px 6px rgba(0, 0, 0, 0.25);
 }
-#cards .card-rarity-sr {
+:is(#cards, .card-print-page) .card-rarity-sr {
   border-color: #b8b8b8;
   box-shadow:
     0 0 10px rgba(184, 184, 184, 0.5),
     0 2px 6px rgba(0, 0, 0, 0.2);
 }
-#cards .card-rarity-r {
+:is(#cards, .card-print-page) .card-rarity-r {
   border-color: #8b6332;
 }
-#cards .card-rarity-n {
+:is(#cards, .card-print-page) .card-rarity-n {
   border-color: #7d7d7d;
 }
 
-#cards article > .yc-header {
+:is(#cards, .card-print-page) article > .yc-header {
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -66,33 +66,29 @@
   border-radius: 0;
 }
 
-#cards .card-rarity-ur .yc-header {
+:is(#cards, .card-print-page) .card-rarity-ur .yc-header {
   background: linear-gradient(180deg, #f4d03f 0%, #b8860b 100%);
   color: #1a1a1a;
 }
-#cards .card-rarity-sr .yc-header {
+:is(#cards, .card-print-page) .card-rarity-sr .yc-header {
   background: linear-gradient(180deg, #ececec 0%, #909090 100%);
   color: #1a1a1a;
 }
-#cards .card-rarity-r .yc-header {
+:is(#cards, .card-print-page) .card-rarity-r .yc-header {
   background: linear-gradient(180deg, #c98a4b 0%, #6e4624 100%);
   color: #fff;
 }
 
-#cards .yc-title {
+:is(#cards, .card-print-page) .yc-title {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 800;
   line-height: 1.2;
-  max-height: 2.4em;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   word-break: break-word;
-  scrollbar-width: thin;
 }
 
-#cards .yc-rarity-badge {
+:is(#cards, .card-print-page) .yc-rarity-badge {
   flex: 0 0 auto;
   align-self: flex-start;
   font-size: 0.7rem;
@@ -104,7 +100,7 @@
   letter-spacing: 0.06em;
 }
 
-#cards .yc-art {
+:is(#cards, .card-print-page) .yc-art {
   position: relative;
   flex: 1 1 auto;
   display: flex;
@@ -120,51 +116,51 @@
   overflow: hidden;
 }
 
-#cards .yc-art.yc-attr-fire {
+:is(#cards, .card-print-page) .yc-art.yc-attr-fire {
   background:
     radial-gradient(circle at 50% 55%, rgba(255, 120, 80, 0.35), transparent 70%),
     var(--pico-background-color);
 }
-#cards .yc-art.yc-attr-water {
+:is(#cards, .card-print-page) .yc-art.yc-attr-water {
   background:
     radial-gradient(circle at 50% 55%, rgba(80, 160, 255, 0.35), transparent 70%),
     var(--pico-background-color);
 }
-#cards .yc-art.yc-attr-light {
+:is(#cards, .card-print-page) .yc-art.yc-attr-light {
   background:
     radial-gradient(circle at 50% 55%, rgba(255, 230, 120, 0.45), transparent 70%),
     var(--pico-background-color);
 }
-#cards .yc-art.yc-attr-dark {
+:is(#cards, .card-print-page) .yc-art.yc-attr-dark {
   background:
     radial-gradient(circle at 50% 55%, rgba(110, 70, 160, 0.4), transparent 70%),
     var(--pico-background-color);
 }
-#cards .yc-art.yc-attr-wind {
+:is(#cards, .card-print-page) .yc-art.yc-attr-wind {
   background:
     radial-gradient(circle at 50% 55%, rgba(120, 220, 180, 0.35), transparent 70%),
     var(--pico-background-color);
 }
-#cards .yc-art.yc-attr-earth {
+:is(#cards, .card-print-page) .yc-art.yc-attr-earth {
   background:
     radial-gradient(circle at 50% 55%, rgba(190, 150, 100, 0.35), transparent 70%),
     var(--pico-background-color);
 }
 
-#cards .yc-art-emoji {
+:is(#cards, .card-print-page) .yc-art-emoji {
   font-size: 3.4rem;
   line-height: 1;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
-#cards .yc-art-stars {
+:is(#cards, .card-print-page) .yc-art-stars {
   font-size: 0.75rem;
   letter-spacing: 0.15em;
   color: #d4af37;
   text-shadow: 0 0 4px rgba(212, 175, 55, 0.6);
 }
 
-#cards .yc-art-attribute {
+:is(#cards, .card-print-page) .yc-art-attribute {
   position: absolute;
   top: 0.3rem;
   right: 0.3rem;
@@ -181,26 +177,23 @@
   color: var(--pico-primary-inverse);
 }
 
-#cards .yc-meta {
+:is(#cards, .card-print-page) .yc-meta {
   padding: 0.15rem 0.6rem 0.05rem;
   font-size: 0.72rem;
   color: var(--pico-muted-color);
 }
 
-#cards .yc-flavor {
+:is(#cards, .card-print-page) .yc-flavor {
   margin: 0;
   padding: 0.1rem 0.6rem 0.35rem;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-style: italic;
   color: var(--pico-color);
   line-height: 1.3;
-  max-height: 3.9em;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
+  word-break: break-word;
 }
 
-#cards .yc-stats {
+:is(#cards, .card-print-page) .yc-stats {
   margin-top: auto;
   display: flex;
   justify-content: flex-end;
@@ -212,18 +205,18 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-#cards .yc-stat-label {
+:is(#cards, .card-print-page) .yc-stat-label {
   margin-right: 0.2rem;
   color: var(--pico-muted-color);
   font-size: 0.7rem;
 }
 
-#cards .yc-stat-value {
+:is(#cards, .card-print-page) .yc-stat-value {
   font-size: 0.95rem;
   color: var(--pico-color);
 }
 
-#cards .yc-pending {
+:is(#cards, .card-print-page) .yc-pending {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -231,6 +224,84 @@
   font-style: italic;
   text-align: center;
   padding: 1rem;
+}
+
+/* カード + PDF リンクのラッパ。flex アイテム / scroll-snap はこのラッパに効かせる */
+#cards > .card-cell {
+  flex: 0 0 220px;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  scroll-snap-align: start;
+}
+
+/* ラッパ内のカードは幅をラッパに任せる */
+#cards > .card-cell > article {
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+/* カルーセル内の PDF リンクは控えめな導線にする */
+#cards .card-pdf-link {
+  align-self: center;
+  font-size: 0.8rem;
+  color: var(--pico-muted-color);
+}
+
+/* --- 印刷用ページ（/events/:id/responses/:responseId/card） ---------------- */
+.card-print-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1rem 0;
+}
+
+.card-print-page > article {
+  flex: 0 0 auto;
+}
+
+.card-print-page .card-print-button {
+  width: auto;
+}
+
+@media print {
+  /* ブラウザは印刷時に背景色・グラデーションを既定で省くため、
+     レアリティ色（.yc-header のグラデーション等）とテーマ背景を強制的に印刷させる。
+     print-color-adjust は継承されるので html に指定すれば配下全体に効く */
+  html:has(.card-print-page) {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* テーマ（dark / light）の背景色を紙面全体に維持する */
+  html:has(.card-print-page),
+  html:has(.card-print-page) body {
+    background-color: var(--pico-background-color);
+  }
+
+  /* カード 1 枚だけを紙に出す。ヘッダ・ナビ・テーマ切替・保存ボタンは隠す */
+  body:has(.card-print-page) > header,
+  body:has(.card-print-page) .card-print-button {
+    display: none !important;
+  }
+
+  body:has(.card-print-page) > main {
+    margin: 0;
+    padding: 0;
+    max-width: none;
+  }
+
+  body:has(.card-print-page) .card-print-page {
+    padding: 12mm 0 0;
+  }
+
+  /* 印刷では影や光彩を落とし、枠線だけでカード型レイアウトを保つ */
+  .card-print-page article {
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
 }
 
 /* --- カスタム設問関連 ------------------------------------------------------ */
