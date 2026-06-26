@@ -59,7 +59,7 @@ test.describe("参加者カード生成フロー（ハッピーパス・htmx）"
     const labelBefore = await page.locator("#cards article").first().getAttribute("aria-label");
 
     await page.getByRole("button", { name: "田中 の回答を編集" }).click();
-    const editNameInput = page.locator("#responses").getByLabel("名前");
+    const editNameInput = page.locator("#response-edit").getByLabel("名前");
     await expect(editNameInput).toHaveValue("田中");
     await editNameInput.fill("佐藤");
 

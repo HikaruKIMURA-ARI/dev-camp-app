@@ -50,7 +50,7 @@ test.describe("回答送信フロー（ハッピーパス・htmx）", () => {
     await expect(page.getByLabel("名前")).toHaveValue("");
   });
 
-  test("回答編集: テーブル行の編集ボタンを押すと当該行が編集フォームに差し替わり、更新ボタンで再び集計表に戻り新しい値が反映される", async ({
+  test("回答編集: テーブルの編集ボタンを押すとテーブル外の #response-edit スロットに編集フォームが描画され、更新ボタンで再び集計表に戻り新しい値が反映される", async ({
     page,
   }) => {
     await createEvent(page, "勉強会");
@@ -60,7 +60,7 @@ test.describe("回答送信フロー（ハッピーパス・htmx）", () => {
     await expect(page.getByRole("cell", { name: "田中", exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "田中 の回答を編集" }).click();
-    const editNameInput = page.locator("#responses").getByLabel("名前");
+    const editNameInput = page.locator("#response-edit").getByLabel("名前");
     await expect(editNameInput).toHaveValue("田中");
     await editNameInput.fill("佐藤");
 

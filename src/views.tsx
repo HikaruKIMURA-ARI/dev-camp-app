@@ -323,8 +323,18 @@ export const ResponsesTable: FC<{
   const topPickAggregateStyle = "background-color: var(--pico-primary-focus); font-weight: bold;";
   // 長文のカスタム設問でテーブル幅が崩れないよう、ヘッダセルを省略表示にする。
   // `cursor: help` で title 属性のツールチップが見られることをユーザに示唆する。
+  // min-width を与えないと「はい/いいえ」等の短い回答セルに合わせて列が極端に
+  // 狭くなり縦に折り返されるため、最小幅を確保する。
   const customQuestionHeaderStyle =
-    "max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help;";
+    "min-width: 8rem; max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help;";
+  // カスタム設問の回答セル。列幅はヘッダの min-width で確保しつつ、長文回答は折り返す。
+  const customAnswerCellStyle = "min-width: 8rem; white-space: pre-wrap; word-break: break-word;";
+  // 名前列も幅指定がないと氏名が縦に折り返されるため、最小幅を固定する。
+  const nameCellStyle = "min-width: 7rem; white-space: nowrap;";
+  // コメントは長文になりやすい。候補日や設問が多くテーブルが横長になると、
+  // コメント列が圧縮されて縦に折り返され極端に縦長になる。横スクロールは figure 側に
+  // あるため、min-width で一定の横幅を確保し、語の途中でも折り返して高さの暴走を防ぐ。
+  const commentCellStyle = "min-width: 14rem; white-space: pre-wrap; word-break: break-word;";
 
   const topPickHeaderAttr = (optionId: number) =>
     isTopPick(optionId) ? { "data-top-pick": "true", style: topPickHeaderStyle } : {};
@@ -338,7 +348,7 @@ export const ResponsesTable: FC<{
       <table>
         <thead>
           <tr>
-            <th>名前</th>
+            <th style={nameCellStyle}>名前</th>
             {options.map((option) => (
               <th {...topPickHeaderAttr(option.id)}>{formatOptionLabel(option.label)}</th>
             ))}
@@ -356,31 +366,33 @@ export const ResponsesTable: FC<{
                 {legacyCustomQuestion}
               </th>
             ) : null}
-            <th>コメント</th>
+            <th style={commentCellStyle}>コメント</th>
             <th scope="col">操作</th>
           </tr>
         </thead>
         <tbody>
           {responses.map((response) => (
             <tr>
-              <td>{response.name}</td>
+              <td style={nameCellStyle}>{response.name}</td>
               {options.map((option) => (
                 <td {...topPickCellAttr(option.id)}>{response.answers[String(option.id)] ?? ""}</td>
               ))}
               {customQuestionList.map((q) => (
-                <td>{response.customAnswers?.[String(q.id)] ?? ""}</td>
+                <td style={customAnswerCellStyle}>
+                  {response.customAnswers?.[String(q.id)] ?? ""}
+                </td>
               ))}
               {showLegacyCustomColumn ? (
                 <td {...legacyColumnHiddenAttr}>{response.customAnswer ?? ""}</td>
               ) : null}
-              <td>{response.comment ?? ""}</td>
+              <td style={commentCellStyle}>{response.comment ?? ""}</td>
               <td>
                 <button
                   type="button"
                   class="secondary outline"
                   hx-get={`/events/${event.id}/responses/${response.id}/edit`}
-                  hx-target="closest tr"
-                  hx-swap="outerHTML"
+                  hx-target="#response-edit"
+                  hx-swap="innerHTML scroll:#response-edit:top"
                   aria-label={`${response.name} の回答を編集`}
                 >
                   編集
@@ -481,6 +493,12 @@ export const EventPage: FC<{
           aggregates={aggregates}
         />
       </div>
+      {/*
+        回答編集フォームの描画先。テーブル（overflow-x:auto）の外に置くことで、
+        候補日や設問が多く横長になっても編集フォームが初回回答フォームと同じ
+        ブロックレイアウトを維持し、横スクロール内で崩れないようにする。
+      */}
+      <div id="response-edit"></div>
       <hr />
       <h2>回答する</h2>
       <ResponseFormRow
@@ -520,10 +538,6 @@ export const ResponseFormRow: FC<{
   const answerChoices: Answer[] = ["○", "△", "×"];
 
   const isEdit = mode === "edit" && responseId !== undefined;
-
-  // 編集モード時のテーブル列数: 名前 + 候補数 + 新仕様設問数 + (旧仕様カスタム回答?) + コメント + 操作
-  const editColspan =
-    1 + options.length + customQuestionList.length + (showLegacyCustomQuestion ? 1 : 0) + 1 + 1;
 
   const hxOnBefore = "this.querySelector('button[type=submit]').setAttribute('aria-busy', 'true')";
   const hxOnAfter = isEdit
@@ -628,8 +642,8 @@ export const ResponseFormRow: FC<{
             type="button"
             class="secondary outline"
             hx-get={`/events/${event.id}`}
-            hx-target="#responses"
-            hx-select="#responses"
+            hx-target="#response-edit"
+            hx-select="#response-edit"
             hx-swap="outerHTML"
           >
             キャンセル
@@ -641,10 +655,13 @@ export const ResponseFormRow: FC<{
 
   if (!isEdit) return formNode;
 
+  // 編集フォームはテーブル外の #response-edit スロットに描画されるため、
+  // 初回回答フォームと同じブロックレイアウトを維持する。見出しで編集中であることを示す。
   return (
-    <tr>
-      <td colspan={editColspan}>{formNode}</td>
-    </tr>
+    <article>
+      <h2>回答を編集</h2>
+      {formNode}
+    </article>
   );
 };
 
