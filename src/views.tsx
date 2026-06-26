@@ -316,6 +316,21 @@ export const formatOptionLabel = (raw: string): string => {
   return `${y}/${m}/${d} (${weekday}) ${h}:${mm}`;
 };
 
+// 回答テーブルの日付ヘッダ専用。曜日の手前で改行し、列の横幅を詰める。
+// （日付行 / 曜日・時刻行 の 2 行になる。フリーテキスト等は改行しない）
+export const formatOptionLabelHeader = (raw: string) => {
+  const label = formatOptionLabel(raw);
+  const idx = label.indexOf(" (");
+  if (idx === -1) return label;
+  return (
+    <>
+      {label.slice(0, idx)}
+      <br />
+      {label.slice(idx + 1)}
+    </>
+  );
+};
+
 export const ResponsesTable: FC<{
   event: Event;
   options: EventOption[];
@@ -357,11 +372,9 @@ export const ResponsesTable: FC<{
   // カスタム設問の回答セル。列幅はヘッダの min-width で確保しつつ、長文回答は折り返す。
   const customAnswerCellStyle = "min-width: 8rem; white-space: pre-wrap; word-break: break-word;";
   // 名前列も幅指定がないと氏名が縦に折り返されるため、最小幅を固定する。
-  // 候補日や設問が多くテーブルが横長になると figure の overflow-x で横スクロールが
-  // 発生するため、名前列を position: sticky; left: 0 で固定する。スクロール時に裏の
-  // セルが透けないよう背景色を明示し、z-index で他セルより前面に出す。
-  const nameCellStyle =
-    "min-width: 7rem; white-space: nowrap; position: sticky; left: 0; z-index: 1; background-color: var(--pico-background-color);";
+  // sticky（左固定・上固定）の配線は z-index 競合を避けるため app.css の
+  // .response-table 側に集約している（ここでは幅・折り返しのみ指定）。
+  const nameCellStyle = "min-width: 7rem; white-space: nowrap;";
   // コメントは長文になりやすい。候補日や設問が多くテーブルが横長になると、
   // コメント列が圧縮されて縦に折り返され極端に縦長になる。横スクロールは figure 側に
   // あるため、min-width で一定の横幅を確保し、語の途中でも折り返して高さの暴走を防ぐ。
@@ -376,12 +389,12 @@ export const ResponsesTable: FC<{
 
   return (
     <figure style="overflow-x: auto;">
-      <table>
+      <table class="response-table">
         <thead>
           <tr>
             <th style={nameCellStyle}>名前</th>
             {options.map((option) => (
-              <th {...topPickHeaderAttr(option.id)}>{formatOptionLabel(option.label)}</th>
+              <th {...topPickHeaderAttr(option.id)}>{formatOptionLabelHeader(option.label)}</th>
             ))}
             {customQuestionList.map((q) => (
               <th title={q.question} style={customQuestionHeaderStyle}>
@@ -406,7 +419,9 @@ export const ResponsesTable: FC<{
             <tr>
               <td style={nameCellStyle}>{response.name}</td>
               {options.map((option) => (
-                <td {...topPickCellAttr(option.id)}>{response.answers[String(option.id)] ?? ""}</td>
+                <td class="answer-mark" {...topPickCellAttr(option.id)}>
+                  {response.answers[String(option.id)] ?? ""}
+                </td>
               ))}
               {customQuestionList.map((q) => (
                 <td style={customAnswerCellStyle}>
@@ -440,7 +455,7 @@ export const ResponsesTable: FC<{
                 cross: 0,
               };
               return (
-                <td {...topPickAggregateAttr(option.id)}>
+                <td class="answer-mark" {...topPickAggregateAttr(option.id)}>
                   ○ {agg.circle} △ {agg.triangle} × {agg.cross}
                 </td>
               );

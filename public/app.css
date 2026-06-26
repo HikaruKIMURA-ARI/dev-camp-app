@@ -355,3 +355,43 @@ table td[hidden] {
 #responses table td > form {
   width: 100%;
 }
+
+/* 回答一覧テーブルの行高を詰める。回答者が多いと縦に長くなり一覧性が落ちるため、
+   Pico 標準のセル余白を圧縮して 1 画面に収まる行数を増やす。
+   編集フォーム展開時のセル（td > form を含む）は対象外にして窮屈にならないようにする。 */
+.response-table th,
+.response-table td {
+  padding-top: 0.1rem;
+  padding-bottom: 0.1rem;
+  line-height: 1.2;
+  font-size: 0.85rem;
+}
+.response-table td:has(> form) {
+  padding-top: var(--pico-spacing);
+  padding-bottom: var(--pico-spacing);
+  font-size: 1rem;
+}
+/* 操作列の編集ボタンが行高を押し上げないよう余白と padding を詰める */
+.response-table td button {
+  margin-bottom: 0;
+  padding-top: 0.1rem;
+  padding-bottom: 0.1rem;
+  font-size: 0.8rem;
+}
+
+/* 名前列を左固定する。候補日や設問が多くテーブルが横長になると figure の
+   overflow-x で横スクロールが発生するため、先頭セル（ヘッダ・各回答行・集計行）を
+   position: sticky; left: 0 で固定する。スクロール時に裏のセルが透けないよう
+   背景色を明示し、z-index で他セルより前面に出す。 */
+.response-table th:first-child,
+.response-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background-color: var(--pico-background-color);
+}
+
+/* ○△× の回答セル・集計セルは記号が短いため中央揃えにして見やすくする */
+.response-table td.answer-mark {
+  text-align: center;
+}
