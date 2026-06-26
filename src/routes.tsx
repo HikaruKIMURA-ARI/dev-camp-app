@@ -307,6 +307,8 @@ const renderResponseSubmissionFragment = async (c: Context, eventId: string) => 
         />
       </div>
       <CardsCarousel responses={updated.responses} oob />
+      {/* 編集送信後に編集フォームのスロットを空にする（編集・新規作成いずれでも無害）。 */}
+      <div id="response-edit" hx-swap-oob="true"></div>
     </>,
   );
 };
