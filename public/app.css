@@ -319,3 +319,8 @@ table td[hidden] {
   z-index: 1;
   background-color: var(--pico-background-color);
 }
+
+/* ○△× の回答セル・集計セルは記号が短いため中央揃えにして見やすくする */
+.response-table td.answer-mark {
+  text-align: center;
+}

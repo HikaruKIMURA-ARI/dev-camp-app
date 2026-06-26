@@ -289,6 +289,21 @@ export const formatOptionLabel = (raw: string): string => {
   return `${y}/${m}/${d} (${weekday}) ${h}:${mm}`;
 };
 
+// 回答テーブルの日付ヘッダ専用。曜日の手前で改行し、列の横幅を詰める。
+// （日付行 / 曜日・時刻行 の 2 行になる。フリーテキスト等は改行しない）
+export const formatOptionLabelHeader = (raw: string) => {
+  const label = formatOptionLabel(raw);
+  const idx = label.indexOf(" (");
+  if (idx === -1) return label;
+  return (
+    <>
+      {label.slice(0, idx)}
+      <br />
+      {label.slice(idx + 1)}
+    </>
+  );
+};
+
 export const ResponsesTable: FC<{
   event: Event;
   options: EventOption[];
@@ -352,7 +367,7 @@ export const ResponsesTable: FC<{
           <tr>
             <th style={nameCellStyle}>名前</th>
             {options.map((option) => (
-              <th {...topPickHeaderAttr(option.id)}>{formatOptionLabel(option.label)}</th>
+              <th {...topPickHeaderAttr(option.id)}>{formatOptionLabelHeader(option.label)}</th>
             ))}
             {customQuestionList.map((q) => (
               <th title={q.question} style={customQuestionHeaderStyle}>
@@ -377,7 +392,9 @@ export const ResponsesTable: FC<{
             <tr>
               <td style={nameCellStyle}>{response.name}</td>
               {options.map((option) => (
-                <td {...topPickCellAttr(option.id)}>{response.answers[String(option.id)] ?? ""}</td>
+                <td class="answer-mark" {...topPickCellAttr(option.id)}>
+                  {response.answers[String(option.id)] ?? ""}
+                </td>
               ))}
               {customQuestionList.map((q) => (
                 <td style={customAnswerCellStyle}>
@@ -411,7 +428,7 @@ export const ResponsesTable: FC<{
                 cross: 0,
               };
               return (
-                <td {...topPickAggregateAttr(option.id)}>
+                <td class="answer-mark" {...topPickAggregateAttr(option.id)}>
                   ○ {agg.circle} △ {agg.triangle} × {agg.cross}
                 </td>
               );
