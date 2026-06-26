@@ -9,7 +9,7 @@ directory = "./public"
 
 [vars]
 SKIP_DB_MIGRATE = "1"
-GEMINI_MODEL = "gemini-2.5-flash-lite"
+GEMINI_MODEL = "gemini-3.1-flash-lite"
 
 [observability]
 enabled = true
