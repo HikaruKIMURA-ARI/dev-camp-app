@@ -330,7 +330,11 @@ export const ResponsesTable: FC<{
   // カスタム設問の回答セル。列幅はヘッダの min-width で確保しつつ、長文回答は折り返す。
   const customAnswerCellStyle = "min-width: 8rem; white-space: pre-wrap; word-break: break-word;";
   // 名前列も幅指定がないと氏名が縦に折り返されるため、最小幅を固定する。
-  const nameCellStyle = "min-width: 7rem; white-space: nowrap;";
+  // 候補日や設問が多くテーブルが横長になると figure の overflow-x で横スクロールが
+  // 発生するため、名前列を position: sticky; left: 0 で固定する。スクロール時に裏の
+  // セルが透けないよう背景色を明示し、z-index で他セルより前面に出す。
+  const nameCellStyle =
+    "min-width: 7rem; white-space: nowrap; position: sticky; left: 0; z-index: 1; background-color: var(--pico-background-color);";
   // コメントは長文になりやすい。候補日や設問が多くテーブルが横長になると、
   // コメント列が圧縮されて縦に折り返され極端に縦長になる。横スクロールは figure 側に
   // あるため、min-width で一定の横幅を確保し、語の途中でも折り返して高さの暴走を防ぐ。
@@ -401,7 +405,7 @@ export const ResponsesTable: FC<{
             </tr>
           ))}
           <tr>
-            <td>集計</td>
+            <td style={nameCellStyle}>集計</td>
             {options.map((option) => {
               const agg = aggregates[String(option.id)] ?? {
                 circle: 0,
